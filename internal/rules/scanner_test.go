@@ -226,6 +226,20 @@ func TestDefaultScannerDetectsSensitiveInformationAndMasksEvidence(t *testing.T)
 	}
 }
 
+func TestDefaultScannerMasksPrivateKeyAssignmentEvidence(t *testing.T) {
+	analysis := analysisWithAddedLine("app/config.go", 14, `private key = "raw-private-key-value"`)
+
+	findings := NewScanner().Scan(analysis)
+
+	assertFindingCountByCategory(t, findings, "security", 1)
+	if strings.Contains(findings[0].MaskedEvidence, "raw-private-key-value") {
+		t.Fatalf("private key finding leaked raw value: %q", findings[0].MaskedEvidence)
+	}
+	if !strings.Contains(findings[0].MaskedEvidence, "<masked>") {
+		t.Fatalf("private key finding evidence = %q, want <masked> marker", findings[0].MaskedEvidence)
+	}
+}
+
 func TestDefaultScannerDetectsDangerousOperationsFromAddedLinesOnly(t *testing.T) {
 	analysis := diff.Analysis{Files: []diff.FileDiff{{
 		Filename: "scripts/deploy.sh",
