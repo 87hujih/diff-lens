@@ -2,6 +2,8 @@ package diff
 
 import (
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +20,8 @@ type FileStats struct {
 	CIFiles           int
 	DocsFiles         int
 	MissingPatchFiles int
+	HasSourceChanges  bool
+	HasTestChanges    bool
 }
 
 // Parser 预留给 patch 解析和文件分类逻辑。
@@ -53,6 +57,11 @@ func (p *Parser) Analyze(files []FileInput) Analysis {
 			Hunks:       nil,
 			HasPatch:    patchStatus == PatchStatusPresent,
 			PatchStatus: patchStatus,
+		}
+		if patchStatus == PatchStatusPresent {
+			hunks, warnings := parsePatch(file.Filename, file.Patch)
+			fileDiff.Hunks = hunks
+			analysis.Warnings = append(analysis.Warnings, warnings...)
 		}
 
 		analysis.Files = append(analysis.Files, fileDiff)
@@ -230,8 +239,10 @@ func addKindStats(stats *FileStats, kinds []FileKind) {
 		switch kind {
 		case FileKindSource:
 			stats.SourceFiles++
+			stats.HasSourceChanges = true
 		case FileKindTest:
 			stats.TestFiles++
+			stats.HasTestChanges = true
 		case FileKindConfig:
 			stats.ConfigFiles++
 		case FileKindDependency:
@@ -244,4 +255,110 @@ func addKindStats(stats *FileStats, kinds []FileKind) {
 			stats.DocsFiles++
 		}
 	}
+}
+
+var hunkHeaderPattern = regexp.MustCompile(`^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@ ?(.*)$`)
+
+func parsePatch(filename, patch string) ([]Hunk, []Warning) {
+	lines := strings.Split(patch, "\n")
+	hunks := make([]Hunk, 0)
+	var warnings []Warning
+	var current *Hunk
+	var oldLine int
+	var newLine int
+
+	for idx, line := range lines {
+		if strings.HasPrefix(line, `\ No newline at end of file`) {
+			continue
+		}
+
+		if strings.HasPrefix(line, "@@") {
+			match := hunkHeaderPattern.FindStringSubmatch(line)
+			if match == nil {
+				warnings = append(warnings, Warning{
+					Filename: filename,
+					Message:  "malformed patch hunk header: " + line,
+				})
+				current = nil
+				continue
+			}
+
+			parsedOldLine, err := strconv.Atoi(match[1])
+			if err != nil {
+				warnings = append(warnings, Warning{
+					Filename: filename,
+					Message:  "malformed patch hunk old start: " + line,
+				})
+				current = nil
+				continue
+			}
+			parsedNewLine, err := strconv.Atoi(match[3])
+			if err != nil {
+				warnings = append(warnings, Warning{
+					Filename: filename,
+					Message:  "malformed patch hunk new start: " + line,
+				})
+				current = nil
+				continue
+			}
+
+			hunks = append(hunks, Hunk{
+				Header:  line,
+				Context: strings.TrimSpace(match[5]),
+				Lines:   []DiffLine{},
+			})
+			current = &hunks[len(hunks)-1]
+			oldLine = parsedOldLine
+			newLine = parsedNewLine
+			continue
+		}
+
+		if current == nil {
+			continue
+		}
+
+		if line == "" {
+			if idx == len(lines)-1 {
+				continue
+			}
+			warnings = append(warnings, Warning{
+				Filename: filename,
+				Message:  "malformed patch line outside unified diff marker",
+			})
+			continue
+		}
+
+		switch line[0] {
+		case '+':
+			current.Lines = append(current.Lines, DiffLine{
+				Kind:    DiffLineAdded,
+				Content: line[1:],
+				NewLine: newLine,
+			})
+			newLine++
+		case '-':
+			current.Lines = append(current.Lines, DiffLine{
+				Kind:    DiffLineRemoved,
+				Content: line[1:],
+				OldLine: oldLine,
+			})
+			oldLine++
+		case ' ':
+			current.Lines = append(current.Lines, DiffLine{
+				Kind:    DiffLineContext,
+				Content: line[1:],
+				OldLine: oldLine,
+				NewLine: newLine,
+			})
+			oldLine++
+			newLine++
+		default:
+			warnings = append(warnings, Warning{
+				Filename: filename,
+				Message:  "malformed patch line: " + line,
+			})
+		}
+	}
+
+	return hunks, warnings
 }

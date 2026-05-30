@@ -58,7 +58,26 @@ type FileDiff struct {
 
 // Hunk is reserved for parsed patch hunk data.
 type Hunk struct {
-	Header string
+	Header  string
+	Context string
+	Lines   []DiffLine
+}
+
+// DiffLineKind describes the role of a parsed line within a patch hunk.
+type DiffLineKind string
+
+const (
+	DiffLineAdded   DiffLineKind = "added"
+	DiffLineRemoved DiffLineKind = "removed"
+	DiffLineContext DiffLineKind = "context"
+)
+
+// DiffLine is one parsed line in a unified diff hunk.
+type DiffLine struct {
+	Kind    DiffLineKind
+	Content string
+	OldLine int
+	NewLine int
 }
 
 // Warning describes non-fatal issues encountered during diff analysis.
