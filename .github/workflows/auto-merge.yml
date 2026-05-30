@@ -1,0 +1,89 @@
+name: Auto Merge
+
+on:
+  workflow_run:
+    workflows: ["CI", "PR Quality"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: auto-merge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  merge:
+    name: Auto-merge passing PR
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Resolve pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          prs="$(gh api "repos/${OWNER_REPO}/commits/${HEAD_SHA}/pulls" \
+            -H "Accept: application/vnd.github+json")"
+          number="$(jq -r 'map(select(.state == "open")) | first | .number // empty' <<< "$prs")"
+
+          if [ -z "$number" ]; then
+            echo "mergeable=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          draft="$(jq -r --argjson number "$number" \
+            'map(select(.number == $number)) | first | .draft // false' <<< "$prs")"
+
+          if [ "$draft" = "true" ]; then
+            echo "mergeable=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "mergeable=true" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for PR checks
+        if: steps.pr.outputs.mergeable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          for attempt in {1..60}; do
+            checks="$(gh pr checks "$PR_NUMBER" --repo "$OWNER_REPO" \
+              --json name,bucket,state)"
+            echo "$checks" | jq -r '.[] | "\(.name)\t\(.bucket)\t\(.state)"'
+
+            failed="$(jq '[.[] | select(.bucket == "fail" or .bucket == "cancel")] | length' <<< "$checks")"
+            pending="$(jq '[.[] | select(.bucket == "pending")] | length' <<< "$checks")"
+
+            if [ "$failed" -gt 0 ]; then
+              echo "Some PR checks failed or were cancelled."
+              exit 1
+            fi
+
+            if [ "$pending" -eq 0 ]; then
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "Timed out waiting for PR checks to finish."
+          exit 1
+
+      - name: Enable auto-merge
+        if: steps.pr.outputs.mergeable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$OWNER_REPO" --auto --squash --delete-branch
