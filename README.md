@@ -4,7 +4,7 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标�
 
 项目目标不是替代 reviewer，而是帮助 reviewer 更快进入上下文，减少重复检查成本，并把高风险变更提前暴露出来。
 
-> 当前真实模式已完成 GitHub PR 第一阶段获取：PR metadata、变更文件和 commit 列表。diff 解析、规则扫描和 LLM 分析仍在后续阶段；真实模式目前会返回 degraded report，demo 模式用于展示完整产品流程。
+> 当前真实模式已完成 GitHub PR 获取、diff 解析第一阶段和第一批通用确定性规则扫描。真实模式会基于 GitHub PR metadata、变更文件、commit 列表和 patch 输出规则风险；最终报告仍会返回 `degraded: true`，因为 AI/LLM 完整 Review 分析尚未实现。demo 模式用于展示完整产品流程。
 
 ## 功能目标
 
@@ -26,8 +26,8 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标�
 | Go/Gin 后端 | 已完成基础框架 |
 | GitHub PR URL 解析 | 已完成基础校验 |
 | GitHub PR 获取 | 已完成第一阶段真实获取：metadata、files、commits |
-| diff 解析 | 已预留接口与数据结构 |
-| 规则风险扫描 | 已预留 scanner 框架，真实模式尚未运行 |
+| diff 解析 | 已完成第一阶段 patch 解析与文件统计 |
+| 规则风险扫描 | 已完成第一批通用确定性规则：敏感信息、危险操作、测试缺口、大 PR、配置/依赖变更 |
 | OpenAI 兼容 LLM 分析 | 已预留 analyzer 配置入口，真实模式尚未调用 |
 | React/Vite 前端分析台 | 已完成基础页面与 SSE 状态流 |
 | 示例 PR 模式与复制 Review 建议 | 已完成 demo 流程 |
@@ -43,7 +43,7 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标�
 
 ## 设计概览
 
-完整目标链路如下。当前真实模式只完成到 GitHub Client 获取 PR metadata、变更文件和 commit 列表；diff/rules/LLM 仍未接入真实分析。
+完整目标链路如下。当前真实模式已经接入 GitHub Client、Diff Parser 和第一批 Rule Scanner；Context Builder 与 LLM Analyzer 仍未接入完整真实分析。
 
 ```text
 GitHub PR URL
@@ -120,6 +120,31 @@ curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
   --data "{\"pr_url\":\"https://github.com/{owner}/{repo}/pull/{number}\",\"demo\":false}"
 ```
 
+真实模式 SSE 预期会包含 GitHub 获取、diff 解析和规则扫描阶段，例如：
+
+```text
+event: fetch_pr
+data: {"stage":"fetch_pr",...}
+
+event: pr
+data: {"stage":"pr",...}
+
+event: parse_diff
+data: {"stage":"parse_diff",...}
+
+event: scan_rules
+data: {"stage":"scan_rules",...}
+
+event: rules
+data: {"stage":"rules",...}
+
+event: result
+data: {"stage":"result",...,"degraded":true,...}
+
+event: done
+data: {"stage":"done"}
+```
+
 需要请求级 token 时：
 
 ```bash
@@ -130,9 +155,11 @@ curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
 
 ## 当前限制
 
-- 真实模式当前只完成 PR 数据获取，会调用 GitHub API 获取 PR metadata、变更文件和 commit 列表。
-- diff 解析、规则扫描、上下文构建和 AI 分析仍在后续模块完成，当前不会基于真实 diff 生成完整 Review 结论。
-- 因此真实模式当前返回 degraded report 是预期行为；它证明真实 PR 获取链路可用，但不代表完整 AI Review 已完成。
+- 真实模式会调用 GitHub API 获取 PR metadata、变更文件和 commit 列表，并解析 patch 统计文件风险、测试变化、配置变化和依赖变化。
+- 第一批规则扫描覆盖敏感信息、危险操作、测试缺口、大 PR、配置变更和依赖变更，并会通过 SSE 输出 `rules` 事件。
+- 第一批规则尚不覆盖 SQL/命令拼接、空 catch、忽略错误或其他需要更多上下文的语言语义风险。
+- 上下文构建和 AI/LLM 完整 Review 分析仍在后续模块完成，当前不会生成完整 AI Review 结论。
+- 因此真实模式当前返回包含 `degraded: true` 的 report 是预期行为；它证明真实 PR 获取、diff 解析和规则扫描链路可用，但不代表完整 AI Review 已完成。
 - demo 模式仍会输出完整演示报告，适合比赛演示和本地体验。
 
 PR 质量检查脚本会校验：
