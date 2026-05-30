@@ -19,7 +19,7 @@ const (
 var (
 	doubleQuotedSecretPattern = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*[:=]\s*")([^"\r\n]*)(")`)
 	singleQuotedSecretPattern = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*[:=]\s*')([^'\r\n]*)(')`)
-	unquotedSecretPattern     = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*[:=]\s*)([^\s,;)\]}]+)`)
+	unquotedSecretPattern     = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*[:=]\s*)([^\r\n]*)`)
 )
 
 type ruleFunc func(AddedLine) []Finding

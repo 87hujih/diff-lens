@@ -111,9 +111,10 @@ func TestTruncateEvidenceLimitsLongEvidence(t *testing.T) {
 
 func TestMaskSensitiveEvidenceRemovesRawSecretValueAndKeepsContext(t *testing.T) {
 	tests := []struct {
-		name   string
-		raw    string
-		secret string
+		name      string
+		raw       string
+		secret    string
+		forbidden string
 	}{
 		{
 			name:   "quoted secret",
@@ -126,9 +127,40 @@ func TestMaskSensitiveEvidenceRemovesRawSecretValueAndKeepsContext(t *testing.T)
 			secret: "abc$restOfSecret!?:/+=-xyz",
 		},
 		{
-			name:   "unquoted secret with punctuation",
-			raw:    `password = abc$restOfSecret!?:/+=-xyz, next := true`,
-			secret: "abc$restOfSecret!?:/+=-xyz",
+			name:      "unquoted secret with punctuation",
+			raw:       `password = abc$restOfSecret!?:/+=-xyz, next := true`,
+			secret:    "abc$restOfSecret!?:/+=-xyz",
+			forbidden: "restOfSecret",
+		},
+		{
+			name:      "unquoted secret with comma",
+			raw:       `api_key: abc,def`,
+			secret:    "abc,def",
+			forbidden: "def",
+		},
+		{
+			name:      "unquoted secret with semicolon",
+			raw:       `api_key: abc;def`,
+			secret:    "abc;def",
+			forbidden: "def",
+		},
+		{
+			name:      "unquoted secret with paren",
+			raw:       `api_key: abc)def`,
+			secret:    "abc)def",
+			forbidden: "def",
+		},
+		{
+			name:      "unquoted secret with bracket",
+			raw:       `api_key: abc]def`,
+			secret:    "abc]def",
+			forbidden: "def",
+		},
+		{
+			name:      "unquoted secret with brace",
+			raw:       `api_key: abc}def`,
+			secret:    "abc}def",
+			forbidden: "def",
 		},
 	}
 
@@ -138,6 +170,9 @@ func TestMaskSensitiveEvidenceRemovesRawSecretValueAndKeepsContext(t *testing.T)
 
 			if strings.Contains(masked, tt.secret) {
 				t.Fatalf("masked evidence still contains raw secret value: %q", masked)
+			}
+			if tt.forbidden != "" && strings.Contains(masked, tt.forbidden) {
+				t.Fatalf("masked evidence still contains raw secret suffix %q: %q", tt.forbidden, masked)
 			}
 			if !strings.Contains(strings.ToLower(masked), strings.ToLower(secretKeyFromEvidence(tt.raw))) {
 				t.Fatalf("masked evidence lost key context: %q", masked)
@@ -195,8 +230,20 @@ func testRule(ruleID, category string) ruleFunc {
 }
 
 func secretKeyFromEvidence(evidence string) string {
-	beforeAssignment, _, _ := strings.Cut(evidence, "=")
-	return strings.TrimSpace(beforeAssignment)
+	equalIndex := strings.Index(evidence, "=")
+	colonIndex := strings.Index(evidence, ":")
+	switch {
+	case equalIndex == -1 && colonIndex == -1:
+		return strings.TrimSpace(evidence)
+	case equalIndex == -1:
+		return strings.TrimSpace(evidence[:colonIndex])
+	case colonIndex == -1:
+		return strings.TrimSpace(evidence[:equalIndex])
+	case equalIndex < colonIndex:
+		return strings.TrimSpace(evidence[:equalIndex])
+	default:
+		return strings.TrimSpace(evidence[:colonIndex])
+	}
 }
 
 func analysisWithAddedLine(filename string, line int, content string) diff.Analysis {
