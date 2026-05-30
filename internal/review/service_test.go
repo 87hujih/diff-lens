@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"diff-lens/internal/demo"
+	"diff-lens/internal/diff"
 	"diff-lens/internal/github"
 	"diff-lens/internal/review"
+	"diff-lens/internal/rules"
 )
 
 func TestAnalyzeDemoEmitsStableEventOrder(t *testing.T) {
@@ -51,6 +53,8 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		GitHubClientFactory: func(token string) review.GitHubClient {
 			return &fakeGitHubClient{data: samplePullRequestData()}
 		},
+		DiffParser:   fakeDiffParser{},
+		RulesScanner: fakeRulesScanner{},
 	})
 
 	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
@@ -65,6 +69,11 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		review.EventStep,
 		review.EventStep,
 		review.EventPR,
+		review.EventStep,
+		review.EventStep,
+		review.EventStep,
+		review.EventStep,
+		review.EventRules,
 		review.EventResult,
 		review.EventDone,
 	})
@@ -96,7 +105,7 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		t.Fatalf("pr event = %#v, want %#v", pr, wantPR)
 	}
 
-	report := got[3].Data.(review.Report)
+	report := got[8].Data.(review.Report)
 	if !report.Degraded {
 		t.Fatalf("result degraded = false, want true")
 	}
@@ -110,9 +119,163 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		t.Fatalf("result comments = %d, want 0", len(report.Comments))
 	}
 
-	done := got[4].Data.(review.DonePayload)
+	done := got[9].Data.(review.DonePayload)
 	if !done.OK || !done.Degraded {
 		t.Fatalf("done = %#v, want ok=true degraded=true", done)
+	}
+}
+
+func TestAnalyzeRealParsesGitHubFilesScansRulesAndMapsRisks(t *testing.T) {
+	parser := &capturingDiffParser{
+		analysis: diff.Analysis{
+			Stats: diff.FileStats{ChangedFiles: 2, Additions: 12, Deletions: 3},
+			Files: []diff.FileDiff{{Filename: "internal/service.go"}},
+		},
+	}
+	scanner := &capturingRulesScanner{
+		findings: []rules.Finding{{
+			ID:             "security.sensitive-information:internal/service.go:42:abc123",
+			RuleID:         "security.sensitive-information",
+			Severity:       "high",
+			Confidence:     0.91,
+			Category:       "security",
+			Title:          "Sensitive information added",
+			File:           "internal/service.go",
+			Line:           42,
+			MaskedEvidence: `api_token="<masked>"`,
+			Reason:         "Added code appears to include a credential.",
+			Suggestion:     "Move secrets to managed storage.",
+		}},
+	}
+	data := samplePullRequestData()
+	data.Files = []github.PullRequestFile{
+		{
+			Filename:  "internal/service.go",
+			Status:    "modified",
+			Additions: 12,
+			Deletions: 3,
+			Changes:   15,
+			Patch:     "@@ -1 +1 @@\n-old\n+api_token=\"secret\"\n",
+		},
+		{
+			Filename:  "assets/logo.png",
+			Status:    "added",
+			Additions: 0,
+			Deletions: 0,
+			Changes:   0,
+		},
+	}
+	service := review.NewService(review.ServiceOptions{
+		GitHubClientFactory: func(token string) review.GitHubClient {
+			return &fakeGitHubClient{data: data}
+		},
+		DiffParser:   parser,
+		RulesScanner: scanner,
+	})
+
+	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
+		PRURL: "https://github.com/openai/example/pull/123",
+	})
+	if err != nil {
+		t.Fatalf("Analyze returned error: %v", err)
+	}
+
+	got := collectEvents(t, events)
+	assertEventTypes(t, got, []review.EventType{
+		review.EventStep,
+		review.EventStep,
+		review.EventPR,
+		review.EventStep,
+		review.EventStep,
+		review.EventStep,
+		review.EventStep,
+		review.EventRules,
+		review.EventResult,
+		review.EventDone,
+	})
+
+	if len(parser.inputs) != 2 {
+		t.Fatalf("parser inputs = %d, want 2", len(parser.inputs))
+	}
+	wantFirstInput := diff.FileInput{
+		Filename:             "internal/service.go",
+		Status:               "modified",
+		Additions:            12,
+		Deletions:            3,
+		Changes:              15,
+		Patch:                "@@ -1 +1 @@\n-old\n+api_token=\"secret\"\n",
+		PatchBinaryOrOmitted: false,
+	}
+	if !reflect.DeepEqual(parser.inputs[0], wantFirstInput) {
+		t.Fatalf("first parser input = %#v, want %#v", parser.inputs[0], wantFirstInput)
+	}
+	if parser.inputs[1].PatchBinaryOrOmitted {
+		t.Fatalf("second parser input PatchBinaryOrOmitted = true, want false because GitHub data cannot express it")
+	}
+
+	if !reflect.DeepEqual(scanner.analysis, parser.analysis) {
+		t.Fatalf("scanner analysis = %#v, want parser analysis %#v", scanner.analysis, parser.analysis)
+	}
+
+	rulesPayload := got[7].Data.(review.RulesPayload)
+	wantRisk := review.Risk{
+		ID:         "security.sensitive-information:internal/service.go:42:abc123",
+		Source:     "rules",
+		Severity:   "high",
+		Confidence: 0.91,
+		Category:   "security",
+		Title:      "Sensitive information added",
+		File:       "internal/service.go",
+		Line:       42,
+		Evidence:   `api_token="<masked>"`,
+		Reason:     "Added code appears to include a credential.",
+		Suggestion: "Move secrets to managed storage.",
+	}
+	if !reflect.DeepEqual(rulesPayload.Risks, []review.Risk{wantRisk}) {
+		t.Fatalf("rules risks = %#v, want %#v", rulesPayload.Risks, []review.Risk{wantRisk})
+	}
+
+	report := got[8].Data.(review.Report)
+	if !report.Degraded {
+		t.Fatalf("report degraded = false, want true")
+	}
+	if !reflect.DeepEqual(report.Risks, []review.Risk{wantRisk}) {
+		t.Fatalf("report risks = %#v, want %#v", report.Risks, []review.Risk{wantRisk})
+	}
+}
+
+func TestAnalyzeRealReturnsRecoverableParseDiffError(t *testing.T) {
+	parseErr := errors.New("parse failed")
+	service := review.NewService(review.ServiceOptions{
+		GitHubClientFactory: func(token string) review.GitHubClient {
+			return &fakeGitHubClient{data: samplePullRequestData()}
+		},
+		DiffParser:   fakeDiffParser{err: parseErr},
+		RulesScanner: fakeRulesScanner{},
+	})
+
+	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
+		PRURL: "https://github.com/openai/example/pull/123",
+	})
+	if err == nil {
+		t.Fatal("Analyze returned nil error, want parse_diff error")
+	}
+	if events != nil {
+		t.Fatalf("events = %v, want nil on parse error", events)
+	}
+
+	var analysisErr *review.AnalysisError
+	if !errors.As(err, &analysisErr) {
+		t.Fatalf("error type = %T, want *review.AnalysisError", err)
+	}
+	if analysisErr.Stage != "parse_diff" {
+		t.Fatalf("stage = %q, want parse_diff", analysisErr.Stage)
+	}
+	if !analysisErr.Recoverable {
+		t.Fatalf("recoverable = false, want true")
+	}
+	if !errors.Is(err, parseErr) {
+		t.Fatalf("wrapped error = %v, want %v", err, parseErr)
 	}
 }
 
@@ -124,6 +287,8 @@ func TestAnalyzeRealUsesRequestGitHubTokenBeforeDefault(t *testing.T) {
 			gotToken = token
 			return &fakeGitHubClient{data: samplePullRequestData()}
 		},
+		DiffParser:   fakeDiffParser{},
+		RulesScanner: fakeRulesScanner{},
 	})
 
 	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
@@ -148,6 +313,8 @@ func TestAnalyzeRealUsesDefaultGitHubTokenWhenRequestTokenEmpty(t *testing.T) {
 			gotToken = token
 			return &fakeGitHubClient{data: samplePullRequestData()}
 		},
+		DiffParser:   fakeDiffParser{},
+		RulesScanner: fakeRulesScanner{},
 	})
 
 	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
@@ -236,6 +403,46 @@ type fakeGitHubClient struct {
 	data github.PullRequestData
 	err  error
 	refs []github.PRRef
+}
+
+type fakeDiffParser struct {
+	analysis diff.Analysis
+	err      error
+}
+
+func (p fakeDiffParser) ParseFiles(files []diff.FileInput) (diff.Analysis, error) {
+	if p.err != nil {
+		return diff.Analysis{}, p.err
+	}
+	return p.analysis, nil
+}
+
+type capturingDiffParser struct {
+	inputs   []diff.FileInput
+	analysis diff.Analysis
+}
+
+func (p *capturingDiffParser) ParseFiles(files []diff.FileInput) (diff.Analysis, error) {
+	p.inputs = append([]diff.FileInput(nil), files...)
+	return p.analysis, nil
+}
+
+type fakeRulesScanner struct {
+	findings []rules.Finding
+}
+
+func (s fakeRulesScanner) Scan(analysis diff.Analysis) []rules.Finding {
+	return s.findings
+}
+
+type capturingRulesScanner struct {
+	analysis diff.Analysis
+	findings []rules.Finding
+}
+
+func (s *capturingRulesScanner) Scan(analysis diff.Analysis) []rules.Finding {
+	s.analysis = analysis
+	return s.findings
 }
 
 func (c *fakeGitHubClient) FetchPullRequest(ctx context.Context, ref github.PRRef) (github.PullRequestData, error) {

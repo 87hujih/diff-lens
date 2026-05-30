@@ -10,9 +10,11 @@ import (
 	"testing"
 
 	"diff-lens/internal/demo"
+	"diff-lens/internal/diff"
 	"diff-lens/internal/github"
 	"diff-lens/internal/handler"
 	"diff-lens/internal/review"
+	"diff-lens/internal/rules"
 )
 
 func TestAnalyzeStreamDemoReturnsSSEEvents(t *testing.T) {
@@ -169,6 +171,8 @@ func TestAnalyzeStreamRealModeSuccessReturnsPRResultAndDone(t *testing.T) {
 		GitHubClientFactory: func(token string) review.GitHubClient {
 			return fakeGitHubClient{data: samplePullRequestData()}
 		},
+		DiffParser:   diff.NewParser(),
+		RulesScanner: rules.NewScanner(),
 	})
 	router := handler.NewRouter(service)
 
@@ -179,7 +183,7 @@ func TestAnalyzeStreamRealModeSuccessReturnsPRResultAndDone(t *testing.T) {
 	}
 
 	body := recorder.Body.String()
-	for _, expected := range []string{"event: pr", "event: result", "event: done", `"degraded":true`, `"ok":true`} {
+	for _, expected := range []string{"event: pr", "event: rules", "event: result", "event: done", `"degraded":true`, `"ok":true`} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("body missing %q:\n%s", expected, body)
 		}

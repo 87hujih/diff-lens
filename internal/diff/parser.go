@@ -32,6 +32,13 @@ func NewParser() *Parser {
 	return &Parser{}
 }
 
+// ParseFiles is the failable service-facing parser entry point. The current
+// parser records malformed patch details as warnings instead of returning an
+// error, so this adapter returns a nil error.
+func (p *Parser) ParseFiles(files []FileInput) (Analysis, error) {
+	return p.Analyze(files), nil
+}
+
 // Analyze normalizes file inputs, classifies each file, and parses available
 // patch hunks without aborting analysis on malformed hunks.
 func (p *Parser) Analyze(files []FileInput) Analysis {

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"diff-lens/internal/diff"
 	"diff-lens/internal/github"
+	"diff-lens/internal/rules"
 )
 
 // AnalysisError 携带 service 阶段可被 handler 映射的结构化错误信息。
@@ -50,11 +52,24 @@ type GitHubClient interface {
 // GitHubClientFactory 允许 service 按请求 token 创建 GitHub client。
 type GitHubClientFactory func(token string) GitHubClient
 
+// DiffParser is the review-layer interface for converting GitHub file inputs
+// into normalized diff analysis.
+type DiffParser interface {
+	ParseFiles(files []diff.FileInput) (diff.Analysis, error)
+}
+
+// RulesScanner is the review-layer interface for deterministic rules scanning.
+type RulesScanner interface {
+	Scan(analysis diff.Analysis) []rules.Finding
+}
+
 // ServiceOptions 聚合依赖，便于 service 保持可测试。
 type ServiceOptions struct {
 	DemoProvider        DemoProvider
 	GitHubClientFactory GitHubClientFactory
 	DefaultGitHubToken  string
+	DiffParser          DiffParser
+	RulesScanner        RulesScanner
 }
 
 // Service 协调 review 分析模式，并向 handler 输出领域事件流。
@@ -62,6 +77,8 @@ type Service struct {
 	demoProvider        DemoProvider
 	githubClientFactory GitHubClientFactory
 	defaultGitHubToken  string
+	diffParser          DiffParser
+	rulesScanner        RulesScanner
 }
 
 // NewService 使用注入的 provider 构造应用服务。
@@ -70,6 +87,8 @@ func NewService(options ServiceOptions) *Service {
 		demoProvider:        options.DemoProvider,
 		githubClientFactory: options.GitHubClientFactory,
 		defaultGitHubToken:  options.DefaultGitHubToken,
+		diffParser:          options.DiffParser,
+		rulesScanner:        options.RulesScanner,
 	}
 }
 
@@ -130,7 +149,21 @@ func (s *Service) analyzeReal(ctx context.Context, req AnalyzeRequest) (<-chan R
 	}
 
 	pr := prInfoFromPullRequest(data)
+
+	analysis, err := s.parseDiff(data.Files)
+	if err != nil {
+		return nil, &AnalysisError{
+			Code:        "parse_diff_failed",
+			Message:     "failed to parse pull request diff",
+			Recoverable: true,
+			Stage:       "parse_diff",
+			Err:         err,
+		}
+	}
+
+	risks := s.scanRules(analysis)
 	report := degradedReport(pr)
+	report.Risks = risks
 
 	return closedEventStream(
 		running,
@@ -139,9 +172,79 @@ func (s *Service) analyzeReal(ctx context.Context, req AnalyzeRequest) (<-chan R
 			Data: StepPayload{Step: "fetch_pr", Status: "completed", Message: "已获取 PR 元数据、文件列表和 commits"},
 		},
 		ReviewEvent{Type: EventPR, Data: pr},
+		ReviewEvent{
+			Type: EventStep,
+			Data: StepPayload{Step: "parse_diff", Status: "running", Message: "正在解析 diff"},
+		},
+		ReviewEvent{
+			Type: EventStep,
+			Data: StepPayload{Step: "parse_diff", Status: "completed", Message: "已解析 diff"},
+		},
+		ReviewEvent{
+			Type: EventStep,
+			Data: StepPayload{Step: "scan_rules", Status: "running", Message: "正在执行规则扫描"},
+		},
+		ReviewEvent{
+			Type: EventStep,
+			Data: StepPayload{Step: "scan_rules", Status: "completed", Message: "已完成规则扫描"},
+		},
+		ReviewEvent{Type: EventRules, Data: RulesPayload{Risks: risks}},
 		ReviewEvent{Type: EventResult, Data: report},
 		ReviewEvent{Type: EventDone, Data: DonePayload{OK: true, Degraded: true}},
 	), nil
+}
+
+func (s *Service) parseDiff(files []github.PullRequestFile) (diff.Analysis, error) {
+	if s.diffParser == nil {
+		return diff.Analysis{}, errors.New("diff parser is not configured")
+	}
+	return s.diffParser.ParseFiles(diffInputsFromPullRequestFiles(files))
+}
+
+func (s *Service) scanRules(analysis diff.Analysis) []Risk {
+	if s.rulesScanner == nil {
+		return nil
+	}
+	findings := s.rulesScanner.Scan(analysis)
+	return risksFromFindings(findings)
+}
+
+func diffInputsFromPullRequestFiles(files []github.PullRequestFile) []diff.FileInput {
+	inputs := make([]diff.FileInput, 0, len(files))
+	for _, file := range files {
+		inputs = append(inputs, diff.FileInput{
+			Filename:  file.Filename,
+			Status:    file.Status,
+			Additions: file.Additions,
+			Deletions: file.Deletions,
+			Changes:   file.Changes,
+			Patch:     file.Patch,
+			// github.PullRequestFile does not currently expose whether a
+			// missing patch was binary or omitted, so keep this false.
+			PatchBinaryOrOmitted: false,
+		})
+	}
+	return inputs
+}
+
+func risksFromFindings(findings []rules.Finding) []Risk {
+	risks := make([]Risk, 0, len(findings))
+	for _, finding := range findings {
+		risks = append(risks, Risk{
+			ID:         finding.ID,
+			Source:     "rules",
+			Severity:   finding.Severity,
+			Confidence: finding.Confidence,
+			Category:   finding.Category,
+			Title:      finding.Title,
+			File:       finding.File,
+			Line:       finding.Line,
+			Evidence:   finding.MaskedEvidence,
+			Reason:     finding.Reason,
+			Suggestion: finding.Suggestion,
+		})
+	}
+	return risks
 }
 
 func prInfoFromPullRequest(data github.PullRequestData) PRInfo {
