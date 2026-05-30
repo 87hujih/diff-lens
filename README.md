@@ -123,26 +123,35 @@ curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
 真实模式 SSE 预期会包含 GitHub 获取、diff 解析和规则扫描阶段，例如：
 
 ```text
-event: fetch_pr
-data: {"stage":"fetch_pr",...}
+event: step
+data: {"step":"fetch_pr","status":"running","message":"正在获取 PR 信息"}
+
+event: step
+data: {"step":"fetch_pr","status":"completed","message":"已获取 PR 元数据、文件列表和 commits"}
 
 event: pr
-data: {"stage":"pr",...}
+data: {"title":"...","author":"...","repo":"owner/repo","number":123,"source_branch":"feature","target_branch":"main","changed_files":3,"additions":120,"deletions":20,"commits":2}
 
-event: parse_diff
-data: {"stage":"parse_diff",...}
+event: step
+data: {"step":"parse_diff","status":"running","message":"正在解析 diff"}
 
-event: scan_rules
-data: {"stage":"scan_rules",...}
+event: step
+data: {"step":"parse_diff","status":"completed","message":"已解析 diff"}
+
+event: step
+data: {"step":"scan_rules","status":"running","message":"正在执行规则扫描"}
+
+event: step
+data: {"step":"scan_rules","status":"completed","message":"已完成规则扫描"}
 
 event: rules
-data: {"stage":"rules",...}
+data: {"risks":[...]}
 
 event: result
-data: {"stage":"result",...,"degraded":true,...}
+data: {"pr":{...},"summary":{...},"risks":[...],"comments":[],"degraded":true}
 
 event: done
-data: {"stage":"done"}
+data: {"ok":true,"degraded":true}
 ```
 
 需要请求级 token 时：
