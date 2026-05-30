@@ -16,10 +16,11 @@ func TestScanEmptyAnalysisReturnsNoFindings(t *testing.T) {
 	}
 }
 
-func TestScanUsesAddedLinesForFindingsAndDeduplicatesByFileLineCategory(t *testing.T) {
+func TestScanUsesAddedLinesForFindingsAndDeduplicatesExactDuplicates(t *testing.T) {
 	scanner := newScannerWithRules(
 		testRule("test.rule.one", "security"),
 		testRule("test.rule.two", "security"),
+		testRule("test.rule.one", "security"),
 		testRule("test.rule.docs", "docs"),
 	)
 
@@ -36,16 +37,16 @@ func TestScanUsesAddedLinesForFindingsAndDeduplicatesByFileLineCategory(t *testi
 		}},
 	})
 
-	if len(findings) != 2 {
-		t.Fatalf("Scan returned %d findings, want 2: %#v", len(findings), findings)
+	if len(findings) != 3 {
+		t.Fatalf("Scan returned %d findings, want 3: %#v", len(findings), findings)
 	}
 	for _, finding := range findings {
 		if finding.File != "app/config.go" || finding.Line != 11 {
 			t.Fatalf("finding source = %s:%d, want app/config.go:11", finding.File, finding.Line)
 		}
 	}
-	if findings[0].Category != "security" || findings[1].Category != "docs" {
-		t.Fatalf("categories = %q, %q; want security, docs", findings[0].Category, findings[1].Category)
+	if findings[0].RuleID != "test.rule.one" || findings[1].RuleID != "test.rule.two" || findings[2].RuleID != "test.rule.docs" {
+		t.Fatalf("rule IDs = %q, %q, %q; want both security rules and docs rule", findings[0].RuleID, findings[1].RuleID, findings[2].RuleID)
 	}
 }
 
@@ -109,18 +110,61 @@ func TestTruncateEvidenceLimitsLongEvidence(t *testing.T) {
 }
 
 func TestMaskSensitiveEvidenceRemovesRawSecretValueAndKeepsContext(t *testing.T) {
-	evidence := `AWS_SECRET_ACCESS_KEY = "abcdefghijklmnopqrstuvwxyz1234567890"`
-
-	masked := maskSensitiveEvidence(evidence)
-
-	if strings.Contains(masked, "abcdefghijklmnopqrstuvwxyz1234567890") {
-		t.Fatalf("masked evidence still contains raw secret value: %q", masked)
+	tests := []struct {
+		name   string
+		raw    string
+		secret string
+	}{
+		{
+			name:   "quoted secret",
+			raw:    `AWS_SECRET_ACCESS_KEY = "abcdefghijklmnopqrstuvwxyz1234567890"`,
+			secret: "abcdefghijklmnopqrstuvwxyz1234567890",
+		},
+		{
+			name:   "quoted secret with shell punctuation",
+			raw:    `token = "abc$restOfSecret!?:/+=-xyz"`,
+			secret: "abc$restOfSecret!?:/+=-xyz",
+		},
+		{
+			name:   "unquoted secret with punctuation",
+			raw:    `password = abc$restOfSecret!?:/+=-xyz, next := true`,
+			secret: "abc$restOfSecret!?:/+=-xyz",
+		},
 	}
-	if !strings.Contains(masked, "AWS_SECRET_ACCESS_KEY") {
-		t.Fatalf("masked evidence lost key context: %q", masked)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			masked := maskSensitiveEvidence(tt.raw)
+
+			if strings.Contains(masked, tt.secret) {
+				t.Fatalf("masked evidence still contains raw secret value: %q", masked)
+			}
+			if !strings.Contains(strings.ToLower(masked), strings.ToLower(secretKeyFromEvidence(tt.raw))) {
+				t.Fatalf("masked evidence lost key context: %q", masked)
+			}
+			if !strings.Contains(masked, "<masked>") {
+				t.Fatalf("masked evidence = %q, want <masked> marker", masked)
+			}
+		})
 	}
-	if !strings.Contains(masked, "<masked>") {
-		t.Fatalf("masked evidence = %q, want <masked> marker", masked)
+}
+
+func TestNewFindingWithSeverityAndConfidenceUsesSharedSafeguards(t *testing.T) {
+	line := AddedLine{File: "app/config.go", Line: 9, Content: `token = "abc$restOfSecret!?:/+=-xyz"`}
+
+	finding := newFindingWithSeverity("test.rule", "critical", 0.95, "security", "Secret", line, line.Content, "reason", "suggestion")
+
+	if finding.ID == "" {
+		t.Fatal("finding ID is empty")
+	}
+	if finding.Severity != "critical" {
+		t.Fatalf("Severity = %q, want critical", finding.Severity)
+	}
+	if finding.Confidence != 0.95 {
+		t.Fatalf("Confidence = %v, want 0.95", finding.Confidence)
+	}
+	if strings.Contains(finding.MaskedEvidence, "abc$restOfSecret!?:/+=-xyz") {
+		t.Fatalf("MaskedEvidence still contains raw secret: %q", finding.MaskedEvidence)
 	}
 }
 
@@ -148,6 +192,11 @@ func testRule(ruleID, category string) ruleFunc {
 	return func(line AddedLine) []Finding {
 		return []Finding{newFinding(ruleID, category, "Test finding", line, line.Content, "test reason", "test suggestion")}
 	}
+}
+
+func secretKeyFromEvidence(evidence string) string {
+	beforeAssignment, _, _ := strings.Cut(evidence, "=")
+	return strings.TrimSpace(beforeAssignment)
 }
 
 func analysisWithAddedLine(filename string, line int, content string) diff.Analysis {

@@ -16,7 +16,11 @@ const (
 	maxEvidenceLength = 240
 )
 
-var secretAssignmentPattern = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*[:=]\s*["']?)([a-z0-9_./+=-]{8,})(["']?)`)
+var (
+	doubleQuotedSecretPattern = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*[:=]\s*")([^"\r\n]*)(")`)
+	singleQuotedSecretPattern = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*[:=]\s*')([^'\r\n]*)(')`)
+	unquotedSecretPattern     = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*[:=]\s*)([^\s,;)\]}]+)`)
+)
 
 type ruleFunc func(AddedLine) []Finding
 
@@ -80,11 +84,15 @@ func (s *Scanner) Scan(analysis diff.Analysis) []Finding {
 }
 
 func newFinding(ruleID, category, title string, line AddedLine, evidence, reason, suggestion string) Finding {
+	return newFindingWithSeverity(ruleID, defaultSeverity, defaultConfidence, category, title, line, evidence, reason, suggestion)
+}
+
+func newFindingWithSeverity(ruleID, severity string, confidence float64, category, title string, line AddedLine, evidence, reason, suggestion string) Finding {
 	return Finding{
 		ID:             findingID(ruleID, line.File, line.Line, evidence),
 		RuleID:         ruleID,
-		Severity:       defaultSeverity,
-		Confidence:     defaultConfidence,
+		Severity:       severity,
+		Confidence:     confidence,
 		Category:       category,
 		Title:          title,
 		File:           line.File,
@@ -102,7 +110,15 @@ func findingID(ruleID, file string, line int, evidence string) string {
 }
 
 func dedupeKey(finding Finding) string {
-	return fmt.Sprintf("%s:%d:%s", finding.File, finding.Line, finding.Category)
+	return fmt.Sprintf(
+		"%s:%d:%s:%s:%s:%s",
+		finding.File,
+		finding.Line,
+		finding.Category,
+		finding.RuleID,
+		normalizeEvidence(finding.Title),
+		finding.ID,
+	)
 }
 
 func normalizeEvidence(evidence string) string {
@@ -120,5 +136,7 @@ func truncateEvidence(evidence string) string {
 }
 
 func maskSensitiveEvidence(evidence string) string {
-	return secretAssignmentPattern.ReplaceAllString(evidence, "$1$2<masked>$4")
+	masked := doubleQuotedSecretPattern.ReplaceAllString(evidence, "$1$2<masked>$4")
+	masked = singleQuotedSecretPattern.ReplaceAllString(masked, "$1$2<masked>$4")
+	return unquotedSecretPattern.ReplaceAllString(masked, "$1$2<masked>")
 }
