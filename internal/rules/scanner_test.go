@@ -298,6 +298,33 @@ func TestDefaultScannerMasksGoStyleSensitiveAssignments(t *testing.T) {
 	}
 }
 
+func TestDefaultScannerMasksQuotedSensitiveConfigKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		raw  string
+	}{
+		{name: "double quoted token", line: `"token": "raw-token-value"`, raw: "raw-token-value"},
+		{name: "double quoted client secret", line: `"client_secret": "raw-client-secret"`, raw: "raw-client-secret"},
+		{name: "double quoted private key", line: `"private key": "raw-private-key"`, raw: "raw-private-key"},
+		{name: "single quoted token", line: `'token': 'raw-single-token-value'`, raw: "raw-single-token-value"},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			findings := NewScanner().Scan(analysisWithAddedLine("app/config.json", i+40, tt.line))
+
+			assertFindingCountByCategory(t, findings, "security", 1)
+			if strings.Contains(findings[0].MaskedEvidence, tt.raw) {
+				t.Fatalf("quoted sensitive config key leaked raw value %q: %q", tt.raw, findings[0].MaskedEvidence)
+			}
+			if !strings.Contains(findings[0].MaskedEvidence, "<masked>") {
+				t.Fatalf("quoted sensitive config key evidence = %q, want <masked> marker", findings[0].MaskedEvidence)
+			}
+		})
+	}
+}
+
 func TestDefaultScannerDetectsDangerousOperationsFromAddedLinesOnly(t *testing.T) {
 	analysis := diff.Analysis{Files: []diff.FileDiff{{
 		Filename: "scripts/deploy.sh",

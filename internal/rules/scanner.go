@@ -20,13 +20,17 @@ const (
 )
 
 var (
-	doubleQuotedSecretPattern     = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*")([^"\r\n]*)(")`)
-	singleQuotedSecretPattern     = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*')([^'\r\n]*)(')`)
-	unquotedSecretPattern         = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*)([^\r\n]*)`)
-	doubleQuotedPrivateKeyPattern = regexp.MustCompile(`(?i)\b(private\s+key)(\s*(?::=|[:=])\s*")([^"\r\n]*)(")`)
-	singleQuotedPrivateKeyPattern = regexp.MustCompile(`(?i)\b(private\s+key)(\s*(?::=|[:=])\s*')([^'\r\n]*)(')`)
-	unquotedPrivateKeyPattern     = regexp.MustCompile(`(?i)\b(private\s+key)(\s*(?::=|[:=])\s*)([^\r\n]*)`)
-	sensitiveLinePattern          = regexp.MustCompile(`(?i)\b(?:[a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*|private\s+key)\b`)
+	sensitiveKeyPatternText = `[a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*|private\s+key`
+
+	doubleQuotedConfigSecretPattern = regexp.MustCompile(`(?i)("(?:` + sensitiveKeyPatternText + `)")(\s*(?::=|[:=])\s*")([^"\r\n]*)(")`)
+	singleQuotedConfigSecretPattern = regexp.MustCompile(`(?i)('(?:` + sensitiveKeyPatternText + `)')(\s*(?::=|[:=])\s*')([^'\r\n]*)(')`)
+	doubleQuotedSecretPattern       = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*")([^"\r\n]*)(")`)
+	singleQuotedSecretPattern       = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*')([^'\r\n]*)(')`)
+	unquotedSecretPattern           = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*)([^\r\n]*)`)
+	doubleQuotedPrivateKeyPattern   = regexp.MustCompile(`(?i)\b(private\s+key)(\s*(?::=|[:=])\s*")([^"\r\n]*)(")`)
+	singleQuotedPrivateKeyPattern   = regexp.MustCompile(`(?i)\b(private\s+key)(\s*(?::=|[:=])\s*')([^'\r\n]*)(')`)
+	unquotedPrivateKeyPattern       = regexp.MustCompile(`(?i)\b(private\s+key)(\s*(?::=|[:=])\s*)([^\r\n]*)`)
+	sensitiveLinePattern            = regexp.MustCompile(`(?i)\b(?:[a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*|private\s+key)\b`)
 
 	rmRFPattern       = regexp.MustCompile(`(?i)(?:^|[;&|(\s])rm\s+(?:-[^\s\r\n]*r[^\s\r\n]*f[^\s\r\n]*|-[^\s\r\n]*f[^\s\r\n]*r[^\s\r\n]*|-[^\s\r\n]*r[^\s\r\n]*(?:\s+\S+)*\s+-[^\s\r\n]*f[^\s\r\n]*|-[^\s\r\n]*f[^\s\r\n]*(?:\s+\S+)*\s+-[^\s\r\n]*r[^\s\r\n]*)\b`)
 	dropTablePattern  = regexp.MustCompile(`(?i)\bdrop\s+table\b`)
@@ -327,7 +331,9 @@ func truncateEvidence(evidence string) string {
 }
 
 func maskSensitiveEvidence(evidence string) string {
-	masked := doubleQuotedPrivateKeyPattern.ReplaceAllString(evidence, "$1$2<masked>$4")
+	masked := doubleQuotedConfigSecretPattern.ReplaceAllString(evidence, "$1$2<masked>$4")
+	masked = singleQuotedConfigSecretPattern.ReplaceAllString(masked, "$1$2<masked>$4")
+	masked = doubleQuotedPrivateKeyPattern.ReplaceAllString(masked, "$1$2<masked>$4")
 	masked = singleQuotedPrivateKeyPattern.ReplaceAllString(masked, "$1$2<masked>$4")
 	masked = unquotedPrivateKeyPattern.ReplaceAllString(masked, "$1$2<masked>")
 	masked = doubleQuotedSecretPattern.ReplaceAllString(masked, "$1$2<masked>$4")
