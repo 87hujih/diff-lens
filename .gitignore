@@ -11,6 +11,9 @@
 # local package manager cache
 /.npm-cache/
 
+# local competition notes
+/比赛要求.md
+
 # data & secrets
 /data/
 .env
