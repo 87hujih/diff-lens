@@ -23,12 +23,13 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。开发者输�
 | PR 模板 | 已完成 |
 | PR 标题与描述质量检查 | 已完成 |
 | 项目设计文档 | 已完成 |
-| Go/Gin 后端 | 计划中 |
-| GitHub PR 获取与 diff 解析 | 计划中 |
-| 规则风险扫描 | 计划中 |
-| OpenAI 兼容 LLM 分析 | 计划中 |
-| React/Vite 前端分析台 | 计划中 |
-| 示例 PR 模式与复制 Review 建议 | 计划中 |
+| Go/Gin 后端 | 已完成基础框架 |
+| GitHub PR URL 解析 | 已完成基础校验 |
+| GitHub PR 获取与 diff 解析 | 已预留接口与数据结构 |
+| 规则风险扫描 | 已预留 scanner 框架 |
+| OpenAI 兼容 LLM 分析 | 已预留 analyzer 配置入口 |
+| React/Vite 前端分析台 | 已完成基础页面与 SSE 状态流 |
+| 示例 PR 模式与复制 Review 建议 | 已完成 demo 流程 |
 
 ## 技术栈
 
@@ -65,12 +66,35 @@ SSE Stream 返回进度和结果
 
 详细设计见 [AI PR Review 助手设计文档](docs/superpowers/specs/2026-05-29-ai-pr-review-design.md)。
 
-## 本地验证
+## 本地启动与验证
 
-当前可运行的是 PR 质量检查脚本测试：
+后端默认监听 `8080`：
 
 ```bash
+go run ./cmd/server
+```
+
+前端开发服务默认监听 `5173`，并把 `/api` 代理到后端：
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run dev
+```
+
+可运行的验证命令：
+
+```bash
+go test ./...
 node scripts/check-pr-quality.test.mjs
+npm --prefix frontend run build
+```
+
+演示流接口：
+
+```bash
+curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
+  -H "Content-Type: application/json" \
+  --data '{"demo":true}'
 ```
 
 PR 质量检查脚本会校验：
@@ -79,8 +103,6 @@ PR 质量检查脚本会校验：
 - PR 描述是否包含 `功能描述`、`实现思路`、`测试方式`。
 - 是否勾选 `本 PR 只做一件事`。
 - PR 是否超过默认规模限制；必要时可使用 `allow-large-pr` 标签放行。
-
-后续后端和前端落地后，会补充完整的本地启动方式。
 
 ## 项目结构
 
