@@ -200,6 +200,70 @@ func TestAnalyzeParsesGitHubUnifiedPatchHunks(t *testing.T) {
 	}
 }
 
+func TestAnalyzeParsesZeroCountNewFileHunkLineNumbers(t *testing.T) {
+	parser := NewParser()
+
+	analysis := parser.Analyze([]FileInput{
+		{
+			Filename: "new-file.go",
+			Status:   "added",
+			Patch: strings.Join([]string{
+				"@@ -0,0 +1,3 @@",
+				"+package diff",
+				"+",
+				"+func added() {}",
+			}, "\n"),
+		},
+	})
+
+	if len(analysis.Warnings) != 0 {
+		t.Fatalf("expected no warnings, got %#v", analysis.Warnings)
+	}
+	hunks := analysis.Files[0].Hunks
+	if len(hunks) != 1 {
+		t.Fatalf("expected one hunk, got %#v", hunks)
+	}
+	if len(hunks[0].Lines) != 3 {
+		t.Fatalf("expected three added lines, got %#v", hunks[0].Lines)
+	}
+
+	assertDiffLine(t, hunks[0].Lines[0], DiffLineAdded, "package diff", 0, 1)
+	assertDiffLine(t, hunks[0].Lines[1], DiffLineAdded, "", 0, 2)
+	assertDiffLine(t, hunks[0].Lines[2], DiffLineAdded, "func added() {}", 0, 3)
+}
+
+func TestAnalyzeParsesZeroCountDeletedFileHunkLineNumbers(t *testing.T) {
+	parser := NewParser()
+
+	analysis := parser.Analyze([]FileInput{
+		{
+			Filename: "deleted-file.go",
+			Status:   "removed",
+			Patch: strings.Join([]string{
+				"@@ -1,3 +0,0 @@",
+				"-package diff",
+				"-",
+				"-func removed() {}",
+			}, "\n"),
+		},
+	})
+
+	if len(analysis.Warnings) != 0 {
+		t.Fatalf("expected no warnings, got %#v", analysis.Warnings)
+	}
+	hunks := analysis.Files[0].Hunks
+	if len(hunks) != 1 {
+		t.Fatalf("expected one hunk, got %#v", hunks)
+	}
+	if len(hunks[0].Lines) != 3 {
+		t.Fatalf("expected three removed lines, got %#v", hunks[0].Lines)
+	}
+
+	assertDiffLine(t, hunks[0].Lines[0], DiffLineRemoved, "package diff", 1, 0)
+	assertDiffLine(t, hunks[0].Lines[1], DiffLineRemoved, "", 2, 0)
+	assertDiffLine(t, hunks[0].Lines[2], DiffLineRemoved, "func removed() {}", 3, 0)
+}
+
 func TestAnalyzeMalformedHunkAddsWarningAndKeepsParseableHunks(t *testing.T) {
 	parser := NewParser()
 

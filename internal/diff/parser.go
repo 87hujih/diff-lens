@@ -32,8 +32,8 @@ func NewParser() *Parser {
 	return &Parser{}
 }
 
-// Analyze normalizes file inputs and classifies each file. Patch hunk parsing
-// is intentionally deferred to a later task.
+// Analyze normalizes file inputs, classifies each file, and parses available
+// patch hunks without aborting analysis on malformed hunks.
 func (p *Parser) Analyze(files []FileInput) Analysis {
 	analysis := Analysis{
 		Files: make([]FileDiff, 0, len(files)),
