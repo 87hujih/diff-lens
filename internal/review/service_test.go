@@ -246,6 +246,9 @@ func TestAnalyzeRealParsesGitHubFilesScansRulesAndMapsRisks(t *testing.T) {
 	if !report.Degraded {
 		t.Fatalf("report degraded = false, want true")
 	}
+	if report.Summary.RiskLevel != "high" {
+		t.Fatalf("report summary risk level = %q, want high", report.Summary.RiskLevel)
+	}
 	if !reflect.DeepEqual(report.Risks, []review.Risk{wantRisk}) {
 		t.Fatalf("report risks = %#v, want %#v", report.Risks, []review.Risk{wantRisk})
 	}

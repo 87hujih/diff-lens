@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"diff-lens/internal/diff"
 	"diff-lens/internal/github"
@@ -204,6 +205,7 @@ func (s *Service) streamRealAnalysis(ctx context.Context, out chan<- ReviewEvent
 	risks := s.scanRules(analysis)
 	report := degradedReport(pr)
 	report.Risks = risks
+	report.Summary.RiskLevel = riskLevelFromRisks(risks)
 
 	sendReviewEvent(ctx, out, ReviewEvent{
 		Type: EventStep,
@@ -317,6 +319,31 @@ func risksFromFindings(findings []rules.Finding) []Risk {
 		})
 	}
 	return risks
+}
+
+func riskLevelFromRisks(risks []Risk) string {
+	level := "low"
+	for _, risk := range risks {
+		if severityRank(risk.Severity) > severityRank(level) {
+			level = risk.Severity
+		}
+	}
+	return level
+}
+
+func severityRank(severity string) int {
+	switch strings.ToLower(severity) {
+	case "critical":
+		return 4
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	case "low":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func prInfoFromPullRequest(data github.PullRequestData) PRInfo {

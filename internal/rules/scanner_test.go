@@ -162,6 +162,18 @@ func TestMaskSensitiveEvidenceRemovesRawSecretValueAndKeepsContext(t *testing.T)
 			secret:    "abc}def",
 			forbidden: "def",
 		},
+		{
+			name:      "camelCase private key PEM literal",
+			raw:       `privateKey := "-----BEGIN PRIVATE KEY----- raw material -----END PRIVATE KEY-----"`,
+			secret:    "-----BEGIN PRIVATE KEY----- raw material -----END PRIVATE KEY-----",
+			forbidden: "raw material",
+		},
+		{
+			name:      "snake_case private key PEM literal",
+			raw:       `private_key = '-----BEGIN RSA PRIVATE KEY----- raw material -----END RSA PRIVATE KEY-----'`,
+			secret:    "-----BEGIN RSA PRIVATE KEY----- raw material -----END RSA PRIVATE KEY-----",
+			forbidden: "raw material",
+		},
 	}
 
 	for _, tt := range tests {
@@ -227,16 +239,28 @@ func TestDefaultScannerDetectsSensitiveInformationAndMasksEvidence(t *testing.T)
 }
 
 func TestDefaultScannerMasksPrivateKeyAssignmentEvidence(t *testing.T) {
-	analysis := analysisWithAddedLine("app/config.go", 14, `private key = "raw-private-key-value"`)
-
-	findings := NewScanner().Scan(analysis)
-
-	assertFindingCountByCategory(t, findings, "security", 1)
-	if strings.Contains(findings[0].MaskedEvidence, "raw-private-key-value") {
-		t.Fatalf("private key finding leaked raw value: %q", findings[0].MaskedEvidence)
+	tests := []struct {
+		name string
+		line string
+		raw  string
+	}{
+		{name: "spaced private key", line: `private key = "raw-private-key-value"`, raw: "raw-private-key-value"},
+		{name: "camelCase private key", line: `privateKey := "raw-private-key-value"`, raw: "raw-private-key-value"},
+		{name: "snake_case private key", line: `private_key = "raw-private-key-value"`, raw: "raw-private-key-value"},
 	}
-	if !strings.Contains(findings[0].MaskedEvidence, "<masked>") {
-		t.Fatalf("private key finding evidence = %q, want <masked> marker", findings[0].MaskedEvidence)
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			findings := NewScanner().Scan(analysisWithAddedLine("app/config.go", i+14, tt.line))
+
+			assertFindingCountByCategory(t, findings, "security", 1)
+			if strings.Contains(findings[0].MaskedEvidence, tt.raw) {
+				t.Fatalf("private key finding leaked raw value: %q", findings[0].MaskedEvidence)
+			}
+			if !strings.Contains(findings[0].MaskedEvidence, "<masked>") {
+				t.Fatalf("private key finding evidence = %q, want <masked> marker", findings[0].MaskedEvidence)
+			}
+		})
 	}
 }
 
