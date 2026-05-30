@@ -240,6 +240,35 @@ func TestDefaultScannerMasksPrivateKeyAssignmentEvidence(t *testing.T) {
 	}
 }
 
+func TestDefaultScannerSensitiveTriggersMatchMaskingVocabulary(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		raw  string
+	}{
+		{name: "token", line: `token = "raw-token-value"`, raw: "raw-token-value"},
+		{name: "access key", line: `access_key = "raw-access-key-value"`, raw: "raw-access-key-value"},
+		{name: "client secret", line: `client_secret = "raw-client-secret-value"`, raw: "raw-client-secret-value"},
+		{name: "passwd", line: `passwd = "raw-passwd-value"`, raw: "raw-passwd-value"},
+		{name: "pwd", line: `pwd = "raw-pwd-value"`, raw: "raw-pwd-value"},
+		{name: "password colon", line: `password: "raw-password-colon-value"`, raw: "raw-password-colon-value"},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			findings := NewScanner().Scan(analysisWithAddedLine("app/config.go", i+20, tt.line))
+
+			assertFindingCountByCategory(t, findings, "security", 1)
+			if strings.Contains(findings[0].MaskedEvidence, tt.raw) {
+				t.Fatalf("sensitive finding leaked raw value %q: %q", tt.raw, findings[0].MaskedEvidence)
+			}
+			if !strings.Contains(findings[0].MaskedEvidence, "<masked>") {
+				t.Fatalf("sensitive finding evidence = %q, want <masked> marker", findings[0].MaskedEvidence)
+			}
+		})
+	}
+}
+
 func TestDefaultScannerDetectsDangerousOperationsFromAddedLinesOnly(t *testing.T) {
 	analysis := diff.Analysis{Files: []diff.FileDiff{{
 		Filename: "scripts/deploy.sh",
@@ -273,6 +302,43 @@ func TestDefaultScannerDetectsDangerousOperationsFromAddedLinesOnly(t *testing.T
 		if finding.Title == "" || finding.Reason == "" || finding.Suggestion == "" {
 			t.Fatalf("dangerous operation finding is missing useful text: %#v", finding)
 		}
+	}
+}
+
+func TestDefaultScannerDetectsCommonDangerousOperationVariants(t *testing.T) {
+	analysis := diff.Analysis{Files: []diff.FileDiff{{
+		Filename: "scripts/deploy.sh",
+		Hunks: []diff.Hunk{{
+			Lines: []diff.DiffLine{
+				{Kind: diff.DiffLineAdded, Content: "rm -fr /var/app/cache", NewLine: 10},
+				{Kind: diff.DiffLineAdded, Content: "rm -f -r /var/app/cache", NewLine: 11},
+				{Kind: diff.DiffLineAdded, Content: "git push -f origin main", NewLine: 12},
+			},
+		}},
+	}}}
+
+	findings := NewScanner().Scan(analysis)
+
+	assertFindingCountByCategory(t, findings, "dangerous-operation", 3)
+}
+
+func TestDefaultScannerDeleteFromWhereSuppressionIsSameLineOnly(t *testing.T) {
+	analysis := diff.Analysis{Files: []diff.FileDiff{{
+		Filename: "internal/db/cleanup.sql",
+		Hunks: []diff.Hunk{{
+			Lines: []diff.DiffLine{
+				{Kind: diff.DiffLineAdded, Content: "DELETE FROM sessions WHERE expires_at < now();", NewLine: 1},
+				{Kind: diff.DiffLineAdded, Content: "DELETE FROM sessions;", NewLine: 2},
+				{Kind: diff.DiffLineAdded, Content: "WHERE expires_at < now();", NewLine: 3},
+			},
+		}},
+	}}}
+
+	findings := NewScanner().Scan(analysis)
+
+	assertFindingCountByCategory(t, findings, "dangerous-operation", 1)
+	if findings[0].Line != 2 {
+		t.Fatalf("DELETE finding line = %d, want 2; finding: %#v", findings[0].Line, findings[0])
 	}
 }
 

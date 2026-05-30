@@ -26,15 +26,15 @@ var (
 	doubleQuotedPrivateKeyPattern = regexp.MustCompile(`(?i)\b(private\s+key)(\s*[:=]\s*")([^"\r\n]*)(")`)
 	singleQuotedPrivateKeyPattern = regexp.MustCompile(`(?i)\b(private\s+key)(\s*[:=]\s*')([^'\r\n]*)(')`)
 	unquotedPrivateKeyPattern     = regexp.MustCompile(`(?i)\b(private\s+key)(\s*[:=]\s*)([^\r\n]*)`)
-	sensitiveLinePattern          = regexp.MustCompile(`(?i)\b(password\s*=|api[_-]?key\b|secret\b|private\s+key\b)`)
+	sensitiveLinePattern          = regexp.MustCompile(`(?i)\b(?:[a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*|private\s+key)\b`)
 
-	rmRFPattern       = regexp.MustCompile(`(?i)(?:^|[;&|(\s])rm\s+-[^\r\n]*r[^\r\n]*f\b`)
+	rmRFPattern       = regexp.MustCompile(`(?i)(?:^|[;&|(\s])rm\s+(?:-[^\s\r\n]*r[^\s\r\n]*f[^\s\r\n]*|-[^\s\r\n]*f[^\s\r\n]*r[^\s\r\n]*|-[^\s\r\n]*r[^\s\r\n]*(?:\s+\S+)*\s+-[^\s\r\n]*f[^\s\r\n]*|-[^\s\r\n]*f[^\s\r\n]*(?:\s+\S+)*\s+-[^\s\r\n]*r[^\s\r\n]*)\b`)
 	dropTablePattern  = regexp.MustCompile(`(?i)\bdrop\s+table\b`)
 	truncatePattern   = regexp.MustCompile(`(?i)\btruncate(?:\s+table)?\b`)
 	deleteFromPattern = regexp.MustCompile(`(?i)\bdelete\s+from\b`)
 	wherePattern      = regexp.MustCompile(`(?i)\bwhere\b`)
 	chmod777Pattern   = regexp.MustCompile(`(?i)\bchmod\s+777\b`)
-	forcePushPattern  = regexp.MustCompile(`(?i)\bgit\s+push\b.*--force(?:-with-lease)?\b`)
+	forcePushPattern  = regexp.MustCompile(`(?i)\bgit\s+push\b.*(?:--force(?:-with-lease)?|-f)\b`)
 )
 
 type ruleFunc func(AddedLine) []Finding
