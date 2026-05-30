@@ -1,0 +1,24 @@
+{
+  "name": "diff-lens-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && npm run build:assets && node scripts/write-build-html.mjs",
+    "build:assets": "esbuild src/main.tsx --bundle --format=esm --target=es2022 --jsx=automatic --loader:.css=css --outdir=dist/assets --entry-names=index --asset-names=[name] --public-path=/assets",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
+  }
+}
