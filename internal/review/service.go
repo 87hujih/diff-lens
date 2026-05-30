@@ -8,9 +8,6 @@ import (
 	"diff-lens/internal/github"
 )
 
-// ErrRealAnalysisNotImplemented 标记非 demo PR 分析尚未实现的脚手架边界。
-var ErrRealAnalysisNotImplemented = errors.New("real PR analysis is not implemented yet")
-
 // AnalysisError 携带 service 阶段可被 handler 映射的结构化错误信息。
 type AnalysisError struct {
 	Code        string
