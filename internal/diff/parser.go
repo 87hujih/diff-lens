@@ -39,7 +39,7 @@ func (p *Parser) Analyze(files []FileInput) Analysis {
 	}
 
 	for _, file := range files {
-		patchStatus := classifyPatchStatus(file.Patch)
+		patchStatus := classifyPatchStatus(file)
 		kinds := ClassifyFile(file.Filename)
 
 		fileDiff := FileDiff{
@@ -121,6 +121,9 @@ func isSourceFile(ext string) bool {
 }
 
 func isTestFile(filename, base string) bool {
+	if strings.HasPrefix(filename, "__tests__/") || strings.HasPrefix(filename, "test/") || strings.HasPrefix(filename, "tests/") {
+		return true
+	}
 	if strings.Contains(filename, "/__tests__/") || strings.Contains(filename, "/test/") || strings.Contains(filename, "/tests/") {
 		return true
 	}
@@ -209,11 +212,14 @@ func isDocsFile(filename, base, ext string) bool {
 	}
 }
 
-func classifyPatchStatus(patch string) PatchStatus {
-	if patch == "" {
+func classifyPatchStatus(file FileInput) PatchStatus {
+	if file.PatchBinaryOrOmitted {
+		return PatchStatusBinaryOrOmitted
+	}
+	if file.Patch == "" {
 		return PatchStatusMissing
 	}
-	if strings.TrimSpace(patch) == "" {
+	if strings.TrimSpace(file.Patch) == "" {
 		return PatchStatusEmpty
 	}
 	return PatchStatusPresent

@@ -26,12 +26,13 @@ const (
 
 // FileInput is the service-neutral shape accepted by the diff parser.
 type FileInput struct {
-	Filename  string
-	Status    string
-	Additions int
-	Deletions int
-	Changes   int
-	Patch     string
+	Filename             string
+	Status               string
+	Additions            int
+	Deletions            int
+	Changes              int
+	Patch                string
+	PatchBinaryOrOmitted bool
 }
 
 // Analysis is the language-neutral output passed to downstream scanners.
