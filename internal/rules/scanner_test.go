@@ -184,6 +184,166 @@ func TestMaskSensitiveEvidenceRemovesRawSecretValueAndKeepsContext(t *testing.T)
 	}
 }
 
+func TestDefaultScannerDetectsSensitiveInformationAndMasksEvidence(t *testing.T) {
+	analysis := diff.Analysis{Files: []diff.FileDiff{{
+		Filename: "app/config.go",
+		Hunks: []diff.Hunk{{
+			Lines: []diff.DiffLine{
+				{Kind: diff.DiffLineAdded, Content: `password = "correct-horse-battery-staple"`, NewLine: 10},
+				{Kind: diff.DiffLineAdded, Content: `api_key = "sk_live_1234567890"`, NewLine: 11},
+				{Kind: diff.DiffLineAdded, Content: `secret = "do-not-commit"`, NewLine: 12},
+				{Kind: diff.DiffLineAdded, Content: `private key material follows`, NewLine: 13},
+			},
+		}},
+	}}}
+
+	findings := NewScanner().Scan(analysis)
+
+	assertFindingCountByCategory(t, findings, "security", 4)
+	forbidden := []string{
+		"correct-horse-battery-staple",
+		"sk_live_1234567890",
+		"do-not-commit",
+	}
+	for _, finding := range findings {
+		if finding.Category != "security" {
+			continue
+		}
+		if finding.Severity != "medium" {
+			t.Fatalf("sensitive finding severity = %q, want medium", finding.Severity)
+		}
+		if finding.Confidence <= 0 || finding.Confidence > 1 {
+			t.Fatalf("sensitive finding confidence = %v, want within (0,1]", finding.Confidence)
+		}
+		if finding.Title == "" || finding.Reason == "" || finding.Suggestion == "" {
+			t.Fatalf("sensitive finding is missing useful text: %#v", finding)
+		}
+		for _, raw := range forbidden {
+			if strings.Contains(finding.MaskedEvidence, raw) {
+				t.Fatalf("masked evidence contains raw secret %q: %q", raw, finding.MaskedEvidence)
+			}
+		}
+	}
+}
+
+func TestDefaultScannerDetectsDangerousOperationsFromAddedLinesOnly(t *testing.T) {
+	analysis := diff.Analysis{Files: []diff.FileDiff{{
+		Filename: "scripts/deploy.sh",
+		Hunks: []diff.Hunk{{
+			Lines: []diff.DiffLine{
+				{Kind: diff.DiffLineRemoved, Content: "rm -rf /tmp/old", OldLine: 1},
+				{Kind: diff.DiffLineAdded, Content: "rm -rf /var/app/cache", NewLine: 2},
+				{Kind: diff.DiffLineAdded, Content: "DROP TABLE users;", NewLine: 3},
+				{Kind: diff.DiffLineAdded, Content: "TRUNCATE audit_log;", NewLine: 4},
+				{Kind: diff.DiffLineAdded, Content: "DELETE FROM sessions;", NewLine: 5},
+				{Kind: diff.DiffLineAdded, Content: "DELETE FROM sessions WHERE expires_at < now();", NewLine: 6},
+				{Kind: diff.DiffLineAdded, Content: "chmod 777 ./uploads", NewLine: 7},
+				{Kind: diff.DiffLineAdded, Content: "git push --force-with-lease origin main", NewLine: 8},
+			},
+		}},
+	}}}
+
+	findings := NewScanner().Scan(analysis)
+
+	assertFindingCountByCategory(t, findings, "dangerous-operation", 6)
+	for _, finding := range findings {
+		if finding.Category != "dangerous-operation" {
+			continue
+		}
+		if finding.Line == 1 {
+			t.Fatalf("removed line produced finding: %#v", finding)
+		}
+		if finding.Line == 6 {
+			t.Fatalf("DELETE FROM with WHERE produced finding: %#v", finding)
+		}
+		if finding.Title == "" || finding.Reason == "" || finding.Suggestion == "" {
+			t.Fatalf("dangerous operation finding is missing useful text: %#v", finding)
+		}
+	}
+}
+
+func TestDefaultScannerReportsTestGapOnlyForSourceChangesWithoutTests(t *testing.T) {
+	sourceWithoutTests := diff.Analysis{
+		Files: []diff.FileDiff{{Filename: "internal/app/service.go", Kinds: []diff.FileKind{diff.FileKindSource}}},
+		Stats: diff.FileStats{ChangedFiles: 1, SourceFiles: 1, HasSourceChanges: true},
+	}
+
+	findings := NewScanner().Scan(sourceWithoutTests)
+
+	assertFindingCountByCategory(t, findings, "testing", 1)
+	if findings[0].Severity != "medium" {
+		t.Fatalf("test gap severity = %q, want medium", findings[0].Severity)
+	}
+
+	pureDocsAndTests := diff.Analysis{
+		Files: []diff.FileDiff{
+			{Filename: "README.md", Kinds: []diff.FileKind{diff.FileKindDocs}},
+			{Filename: "internal/app/service_test.go", Kinds: []diff.FileKind{diff.FileKindSource, diff.FileKindTest}},
+		},
+		Stats: diff.FileStats{ChangedFiles: 2, TestFiles: 1, DocsFiles: 1, HasTestChanges: true},
+	}
+
+	findings = NewScanner().Scan(pureDocsAndTests)
+
+	assertNoFindingCategory(t, findings, "testing")
+}
+
+func TestDefaultScannerReportsLargePRAtConservativeThresholds(t *testing.T) {
+	atFileThreshold := diff.Analysis{Stats: diff.FileStats{ChangedFiles: 50}}
+	overFileThreshold := diff.Analysis{Stats: diff.FileStats{ChangedFiles: 51}}
+	atChangeThreshold := diff.Analysis{Stats: diff.FileStats{Additions: 700, Deletions: 300}}
+	overChangeThreshold := diff.Analysis{Stats: diff.FileStats{Additions: 701, Deletions: 300}}
+
+	assertNoFindingCategory(t, NewScanner().Scan(atFileThreshold), "change-size")
+	assertFindingCountByCategory(t, NewScanner().Scan(overFileThreshold), "change-size", 1)
+	assertNoFindingCategory(t, NewScanner().Scan(atChangeThreshold), "change-size")
+	assertFindingCountByCategory(t, NewScanner().Scan(overChangeThreshold), "change-size", 1)
+}
+
+func TestDefaultScannerReportsConfigAndDependencyRisk(t *testing.T) {
+	analysis := diff.Analysis{Files: []diff.FileDiff{
+		classifiedFile(".github/workflows/ci.yml"),
+		classifiedFile("Dockerfile"),
+		classifiedFile(".env.example"),
+		classifiedFile("package-lock.json"),
+	}}
+
+	findings := NewScanner().Scan(analysis)
+
+	assertFindingCountByCategory(t, findings, "configuration", 4)
+	for _, finding := range findings {
+		if finding.Category != "configuration" {
+			continue
+		}
+		if finding.File == "" || finding.Title == "" || finding.Reason == "" || finding.Suggestion == "" {
+			t.Fatalf("configuration finding is missing useful context: %#v", finding)
+		}
+	}
+}
+
+func TestDefaultScannerDoesNotClaimDeferredRules(t *testing.T) {
+	analysis := diff.Analysis{Files: []diff.FileDiff{{
+		Filename: "internal/app/service.go",
+		Hunks: []diff.Hunk{{
+			Lines: []diff.DiffLine{
+				{Kind: diff.DiffLineAdded, Content: `query := "SELECT * FROM users WHERE id = " + id`, NewLine: 10},
+				{Kind: diff.DiffLineAdded, Content: `cmd := "rm " + userInput`, NewLine: 11},
+				{Kind: diff.DiffLineAdded, Content: `result, _ := doWork()`, NewLine: 12},
+			},
+		}},
+	}}}
+
+	findings := NewScanner().Scan(analysis)
+
+	for _, finding := range findings {
+		if strings.Contains(strings.ToLower(finding.Title), "concat") ||
+			strings.Contains(strings.ToLower(finding.Title), "sql injection") ||
+			strings.Contains(strings.ToLower(finding.Title), "error handling") {
+			t.Fatalf("scanner claimed deferred rule: %#v", finding)
+		}
+	}
+}
+
 func TestNewFindingWithSeverityAndConfidenceUsesSharedSafeguards(t *testing.T) {
 	line := AddedLine{File: "app/config.go", Line: 9, Content: `token = "abc$restOfSecret!?:/+=-xyz"`}
 
@@ -261,4 +421,31 @@ func fileWithAddedLine(filename string, line int, content string) diff.FileDiff 
 			}},
 		}},
 	}
+}
+
+func classifiedFile(filename string) diff.FileDiff {
+	return diff.FileDiff{
+		Filename: filename,
+		Kinds:    diff.ClassifyFile(filename),
+	}
+}
+
+func assertFindingCountByCategory(t *testing.T, findings []Finding, category string, want int) {
+	t.Helper()
+
+	got := 0
+	for _, finding := range findings {
+		if finding.Category == category {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("finding count for category %q = %d, want %d; findings: %#v", category, got, want, findings)
+	}
+}
+
+func assertNoFindingCategory(t *testing.T, findings []Finding, category string) {
+	t.Helper()
+
+	assertFindingCountByCategory(t, findings, category, 0)
 }
