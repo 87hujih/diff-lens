@@ -269,6 +269,35 @@ func TestDefaultScannerSensitiveTriggersMatchMaskingVocabulary(t *testing.T) {
 	}
 }
 
+func TestDefaultScannerMasksGoStyleSensitiveAssignments(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		raw  string
+	}{
+		{name: "token declaration", line: `token := "raw-token-value"`, raw: "raw-token-value"},
+		{name: "client secret declaration", line: `client_secret := "raw-client-secret"`, raw: "raw-client-secret"},
+		{name: "password declaration unquoted", line: `password := rawPasswordValue`, raw: "rawPasswordValue"},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			findings := NewScanner().Scan(analysisWithAddedLine("app/config.go", i+30, tt.line))
+
+			assertFindingCountByCategory(t, findings, "security", 1)
+			if strings.Contains(findings[0].MaskedEvidence, tt.raw) {
+				t.Fatalf("Go-style sensitive assignment leaked raw value %q: %q", tt.raw, findings[0].MaskedEvidence)
+			}
+			if !strings.Contains(findings[0].MaskedEvidence, "<masked>") {
+				t.Fatalf("Go-style sensitive assignment evidence = %q, want <masked> marker", findings[0].MaskedEvidence)
+			}
+			if !strings.Contains(findings[0].MaskedEvidence, ":=") {
+				t.Fatalf("Go-style sensitive assignment evidence = %q, want := assignment context preserved", findings[0].MaskedEvidence)
+			}
+		})
+	}
+}
+
 func TestDefaultScannerDetectsDangerousOperationsFromAddedLinesOnly(t *testing.T) {
 	analysis := diff.Analysis{Files: []diff.FileDiff{{
 		Filename: "scripts/deploy.sh",
