@@ -179,7 +179,7 @@ func TestAnalyzeStreamRealModeSuccessReturnsPRResultAndDone(t *testing.T) {
 	}
 
 	body := recorder.Body.String()
-	for _, expected := range []string{"event: pr", "event: result", "event: done", `"ok":true`} {
+	for _, expected := range []string{"event: pr", "event: result", "event: done", `"degraded":true`, `"ok":true`} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("body missing %q:\n%s", expected, body)
 		}

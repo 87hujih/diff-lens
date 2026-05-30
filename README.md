@@ -1,10 +1,10 @@
 # diff-lens
 
-diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。开发者输入 GitHub PR 链接后，系统会获取 PR 变更，结合规则扫描和大模型分析，生成 PR 总结、风险提示和可复制的 Review 建议。
+diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标是：开发者输入 GitHub PR 链接后，系统获取 PR 变更，结合规则扫描和大模型分析，生成 PR 总结、风险提示和可复制的 Review 建议。
 
 项目目标不是替代 reviewer，而是帮助 reviewer 更快进入上下文，减少重复检查成本，并把高风险变更提前暴露出来。
 
-> 当前仓库处于初始化阶段，已完成 PR 模板、PR 质量检查脚本和设计文档。后端、前端和 AI 分析流程会在后续 PR 中逐步实现。
+> 当前真实模式已完成 GitHub PR 第一阶段获取：PR metadata、变更文件和 commit 列表。diff 解析、规则扫描和 LLM 分析仍在后续阶段；真实模式目前会返回 degraded report，demo 模式用于展示完整产品流程。
 
 ## 功能目标
 
@@ -25,9 +25,10 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。开发者输�
 | 项目设计文档 | 已完成 |
 | Go/Gin 后端 | 已完成基础框架 |
 | GitHub PR URL 解析 | 已完成基础校验 |
-| GitHub PR 获取与 diff 解析 | 已预留接口与数据结构 |
-| 规则风险扫描 | 已预留 scanner 框架 |
-| OpenAI 兼容 LLM 分析 | 已预留 analyzer 配置入口 |
+| GitHub PR 获取 | 已完成第一阶段真实获取：metadata、files、commits |
+| diff 解析 | 已预留接口与数据结构 |
+| 规则风险扫描 | 已预留 scanner 框架，真实模式尚未运行 |
+| OpenAI 兼容 LLM 分析 | 已预留 analyzer 配置入口，真实模式尚未调用 |
 | React/Vite 前端分析台 | 已完成基础页面与 SSE 状态流 |
 | 示例 PR 模式与复制 Review 建议 | 已完成 demo 流程 |
 
@@ -42,11 +43,13 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。开发者输�
 
 ## 设计概览
 
+完整目标链路如下。当前真实模式只完成到 GitHub Client 获取 PR metadata、变更文件和 commit 列表；diff/rules/LLM 仍未接入真实分析。
+
 ```text
 GitHub PR URL
       |
       v
-GitHub Client 获取 PR 元数据和 patch
+GitHub Client 获取 PR metadata、files、commits
       |
       v
 Diff Parser 统计文件、测试、配置和依赖变化
@@ -81,6 +84,18 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
+### 环境变量
+
+`GITHUB_TOKEN` 是可选配置，用于提高 GitHub API rate limit，或访问 token 有权限读取的私有仓库。
+
+```bash
+GITHUB_TOKEN=ghp_xxx go run ./cmd/server
+```
+
+请求体中的 `github_token` 优先级高于环境变量 `GITHUB_TOKEN`。如果两者都提供，当前请求会使用 `github_token`；如果请求体没有提供 token，后端会回退使用 `GITHUB_TOKEN`。
+
+Token 只用于当前 GitHub API 请求，不会写入本地文件或数据库。不要把真实 token 提交到仓库或写进 README。
+
 可运行的验证命令：
 
 ```bash
@@ -97,6 +112,29 @@ curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
   --data '{"demo":true}'
 ```
 
+真实公开 PR 手动验证：
+
+```bash
+curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
+  -H "Content-Type: application/json" \
+  --data "{\"pr_url\":\"https://github.com/{owner}/{repo}/pull/{number}\",\"demo\":false}"
+```
+
+需要请求级 token 时：
+
+```bash
+curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
+  -H "Content-Type: application/json" \
+  --data "{\"pr_url\":\"https://github.com/{owner}/{repo}/pull/{number}\",\"github_token\":\"ghp_xxx\",\"demo\":false}"
+```
+
+## 当前限制
+
+- 真实模式当前只完成 PR 数据获取，会调用 GitHub API 获取 PR metadata、变更文件和 commit 列表。
+- diff 解析、规则扫描、上下文构建和 AI 分析仍在后续模块完成，当前不会基于真实 diff 生成完整 Review 结论。
+- 因此真实模式当前返回 degraded report 是预期行为；它证明真实 PR 获取链路可用，但不代表完整 AI Review 已完成。
+- demo 模式仍会输出完整演示报告，适合比赛演示和本地体验。
+
 PR 质量检查脚本会校验：
 
 - PR 标题是否符合 `feat: add xxx`、`fix: handle xxx` 等格式。
@@ -112,10 +150,20 @@ diff-lens/
 │   ├── pull_request_template.md
 │   └── workflows/
 │       └── pr-quality.yml
+├── cmd/
+│   └── server/
 ├── docs/
 │   └── superpowers/
+│       ├── plans/
 │       └── specs/
-│           └── 2026-05-29-ai-pr-review-design.md
+├── frontend/
+│   └── src/
+├── internal/
+│   ├── config/
+│   ├── demo/
+│   ├── github/
+│   ├── handler/
+│   └── review/
 ├── scripts/
 │   ├── check-pr-quality.mjs
 │   └── check-pr-quality.test.mjs

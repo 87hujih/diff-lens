@@ -378,6 +378,7 @@ func TestFetchPullRequestMapsHTTPStatusErrors(t *testing.T) {
 	}{
 		{name: "not found", status: http.StatusNotFound, wantErr: github.ErrPRNotFound},
 		{name: "unauthorized", status: http.StatusUnauthorized, wantErr: github.ErrGitHubUnauthorized},
+		{name: "forbidden without rate limit", status: http.StatusForbidden, wantErr: github.ErrGitHubUnauthorized},
 		{name: "rate limited", status: http.StatusForbidden, headers: map[string]string{"X-RateLimit-Remaining": "0"}, wantErr: github.ErrGitHubRateLimited},
 		{name: "server error", status: http.StatusInternalServerError, wantErr: github.ErrGitHubRequestFailed},
 	}
