@@ -7,7 +7,7 @@ interface StatusBannerProps {
 }
 
 function formatErrorMeta(error: ErrorPayload): string {
-  const details = [];
+  const details = [`Code: ${error.code}`];
 
   if (error.stage) {
     details.push(`Stage: ${error.stage}`);
@@ -16,6 +16,23 @@ function formatErrorMeta(error: ErrorPayload): string {
   details.push(error.recoverable ? "Recoverable" : "Not recoverable");
 
   return details.join(" · ");
+}
+
+// formatErrorTitle converts stable machine codes into readable banner titles.
+function formatErrorTitle(error: ErrorPayload): string {
+  const acronyms: Record<string, string> = {
+    ai: "AI",
+    github: "GitHub",
+    llm: "LLM",
+    pr: "PR",
+    url: "URL"
+  };
+
+  return error.code
+    .split("_")
+    .filter(Boolean)
+    .map((part) => acronyms[part] ?? part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export function StatusBanner({ error, degraded, result }: StatusBannerProps) {
@@ -30,7 +47,7 @@ export function StatusBanner({ error, degraded, result }: StatusBannerProps) {
       {error ? (
         <section className="status-banner status-banner--error" role="alert" aria-live="assertive">
           <div>
-            <strong>{error.code}</strong>
+            <strong>{formatErrorTitle(error)}</strong>
             <p>{error.message}</p>
           </div>
           <span>{formatErrorMeta(error)}</span>

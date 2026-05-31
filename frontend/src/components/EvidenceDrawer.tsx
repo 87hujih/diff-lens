@@ -87,8 +87,14 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
           <p className="eyebrow">Evidence</p>
           <h3 id="evidence-title">{risk.title}</h3>
         </div>
-        <button type="button" className="icon-button" aria-label="Close evidence drawer" onClick={onClose}>
-          X
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Close evidence drawer"
+          title="Close"
+          onClick={onClose}
+        >
+          <span aria-hidden="true">&times;</span>
         </button>
       </div>
 
@@ -122,7 +128,11 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
                 void copyText("evidence", risk.evidence ?? "");
               }}
             >
-              {feedback.evidence === "copied" ? "Copied" : feedback.evidence === "failed" ? "Copy failed" : "Copy"}
+              {feedback.evidence === "copied"
+                ? "Copied"
+                : feedback.evidence === "failed"
+                  ? "Copy failed"
+                  : "Copy evidence"}
             </button>
           ) : null}
         </div>
@@ -165,7 +175,7 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
                 ? "Copied"
                 : feedback.suggestion === "failed"
                   ? "Copy failed"
-                  : "Copy"}
+                  : "Copy suggestion"}
             </button>
           ) : null}
         </div>

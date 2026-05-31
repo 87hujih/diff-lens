@@ -36,6 +36,8 @@ export function AITracePanel({ aiText, steps }: AITracePanelProps) {
     body = "The AI stage finished without streaming trace text. Structured review data may still be available.";
   }
 
+  const statusLabel = aiStatus === "not-started" ? "idle" : aiStatus;
+
   return (
     <section className="ai-trace-panel" aria-labelledby="ai-trace-title">
       <div className="section-heading">
@@ -43,7 +45,7 @@ export function AITracePanel({ aiText, steps }: AITracePanelProps) {
           <p className="eyebrow">AI trace</p>
           <h3 id="ai-trace-title">Model stream</h3>
         </div>
-        <span className={`trace-status trace-status--${aiStatus}`}>{aiStatus}</span>
+        <span className={`trace-status trace-status--${aiStatus}`}>{statusLabel}</span>
       </div>
       <pre className={trimmedAIText ? "" : "ai-trace-panel__empty"}>{body}</pre>
     </section>

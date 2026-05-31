@@ -39,6 +39,9 @@ body {
   margin: 0;
   color: var(--color-text);
   background: var(--color-bg);
+  line-height: 1.5;
+  line-break: strict;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -65,7 +68,7 @@ summary,
   display: grid;
   grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1.45fr);
   gap: 28px;
-  align-items: end;
+  align-items: start;
   width: min(100%, 1480px);
   padding: 22px var(--space-page);
   margin: 0 auto;
@@ -73,12 +76,17 @@ summary,
   border-bottom: 1px solid var(--color-border);
 }
 
+.input-panel__heading {
+  min-width: 0;
+  padding-top: 2px;
+}
+
 .input-panel__heading h1 {
   max-width: 340px;
 }
 
 .input-panel__subtitle {
-  max-width: 42ch;
+  max-width: 48ch;
   margin: 8px 0 0;
   color: var(--color-text-soft);
   font-size: 14px;
@@ -101,10 +109,21 @@ p {
   margin-top: 0;
 }
 
+p,
+li {
+  text-wrap: pretty;
+}
+
 h1 {
   margin-bottom: 0;
   font-size: 28px;
   line-height: 1.1;
+  text-wrap: balance;
+}
+
+h2,
+h3 {
+  line-height: 1.25;
   text-wrap: balance;
 }
 
@@ -170,11 +189,24 @@ summary:focus-visible {
 }
 
 .token-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 12px;
   cursor: pointer;
+  list-style: none;
   transition:
     color 180ms ease,
     background-color 180ms ease;
+}
+
+.token-details summary::marker {
+  content: "";
+}
+
+.token-details summary::-webkit-details-marker {
+  display: none;
 }
 
 .token-details summary:hover {
@@ -182,8 +214,21 @@ summary:focus-visible {
   background: rgba(51, 65, 85, 0.6);
 }
 
+.token-details__hint {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .token-details .field-group {
   padding: 0 12px 12px;
+}
+
+.field-help {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .form-actions {
@@ -208,7 +253,8 @@ button {
     background-color 180ms ease,
     color 180ms ease,
     opacity 180ms ease,
-    box-shadow 180ms ease;
+    box-shadow 180ms ease,
+    transform 120ms ease;
 }
 
 button:hover:not(:disabled) {
@@ -223,6 +269,7 @@ button:active:not(:disabled) {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+  transform: none;
 }
 
 button.secondary {
@@ -832,6 +879,15 @@ button.secondary:hover:not(:disabled) {
   background: rgba(15, 23, 42, 0.62);
 }
 
+.risk-empty p,
+.evidence-drawer--empty p,
+.comments-empty p {
+  margin: 4px 0 0;
+  color: var(--color-text-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 /* 证据抽屉桌面端保持粘性，方便对照风险列表。 */
 .evidence-drawer {
   position: sticky;
@@ -845,6 +901,8 @@ button.secondary:hover:not(:disabled) {
 }
 
 .icon-button {
+  display: inline-grid;
+  place-items: center;
   flex: 0 0 auto;
   width: 44px;
   min-width: 44px;
@@ -853,6 +911,11 @@ button.secondary:hover:not(:disabled) {
   color: var(--color-text);
   border-color: var(--color-border-strong);
   background: var(--color-control);
+}
+
+.icon-button span {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .icon-button:hover:not(:disabled) {
@@ -978,6 +1041,10 @@ button.secondary:hover:not(:disabled) {
   background: var(--color-danger);
 }
 
+.trace-status--not-started {
+  color: var(--color-muted);
+}
+
 .suggested-comments__heading {
   margin-bottom: 12px;
 }
@@ -1026,6 +1093,10 @@ button.secondary:hover:not(:disabled) {
   background: rgba(15, 23, 42, 0.62);
 }
 
+.comments-empty strong {
+  color: var(--color-text-soft);
+}
+
 /* 空状态居中显示，避免未开始分析时主栏塌陷。 */
 .empty-report {
   display: grid;
@@ -1059,7 +1130,9 @@ button.secondary:hover:not(:disabled) {
 .empty-report__skeleton span {
   height: 10px;
   border-radius: 999px;
-  background: #243248;
+  background: linear-gradient(90deg, #243248 0%, #334155 42%, #243248 84%);
+  background-size: 220% 100%;
+  animation: skeleton-scan 1200ms ease-in-out infinite;
 }
 
 .empty-report__skeleton span:nth-child(2) {
@@ -1068,6 +1141,16 @@ button.secondary:hover:not(:disabled) {
 
 .empty-report__skeleton span:nth-child(3) {
   width: 48%;
+}
+
+@keyframes skeleton-scan {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -120% 0;
+  }
 }
 
 /* 用户偏好减少动态效果时，压缩所有动画和过渡时间。 */
@@ -1079,6 +1162,11 @@ button.secondary:hover:not(:disabled) {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .empty-report__skeleton span {
+    animation: none !important;
+    background: #243248;
   }
 }
 
@@ -1141,11 +1229,14 @@ button.secondary:hover:not(:disabled) {
     width: 100%;
   }
 
-  .review-brief__stats,
   .review-brief__summary,
   .review-evidence-grid,
   .evidence-drawer__meta {
     grid-template-columns: 1fr;
+  }
+
+  .review-brief__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .evidence-drawer {
@@ -1194,10 +1285,6 @@ button.secondary:hover:not(:disabled) {
 
   .review-brief__identity h2 {
     font-size: 20px;
-  }
-
-  .filter-tabs {
-    grid-template-columns: 1fr;
   }
 
   .review-brief__summary ul,

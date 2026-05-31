@@ -26,7 +26,9 @@ export function PrInputPanel({
       <div className="input-panel__heading">
         <p className="eyebrow">diff-lens</p>
         <h1 id="review-console-title">PR review console</h1>
-        <p className="input-panel__subtitle">Local review analysis for GitHub pull requests.</p>
+        <p className="input-panel__subtitle">
+          Stream local checks, AI context, evidence, and copy-ready comments from one review console.
+        </p>
       </div>
 
       <form onSubmit={onAnalyze} className="review-form" aria-busy={isRunning}>
@@ -47,7 +49,10 @@ export function PrInputPanel({
         </div>
 
         <details className="token-details">
-          <summary>GitHub token</summary>
+          <summary>
+            <span>GitHub token</span>
+            <span className="token-details__hint">Optional</span>
+          </summary>
           <div className="field-group">
             <label htmlFor="github-token">Token (optional)</label>
             <input
@@ -58,20 +63,21 @@ export function PrInputPanel({
               autoComplete="off"
               disabled={isRunning}
             />
+            <p className="field-help">Use a token for private repositories or higher GitHub API limits.</p>
           </div>
         </details>
 
         <div className="form-actions">
           <button type="submit" disabled={isRunning}>
-            {isRunning ? "Analyzing..." : "Analyze PR"}
+            {isRunning ? "Analyzing PR..." : "Analyze PR"}
           </button>
           <button type="button" className="secondary" onClick={onRunDemo} disabled={isRunning}>
-            Demo PR
+            Run demo
           </button>
         </div>
         {isRunning ? (
           <p className="form-status" role="status" aria-live="polite">
-            Streaming analysis from the backend.
+            Streaming pipeline events from the backend.
           </p>
         ) : null}
       </form>

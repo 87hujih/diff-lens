@@ -73,7 +73,8 @@ export function SuggestedComments({ report }: SuggestedCommentsProps) {
 
       {report.comments.length === 0 ? (
         <div className="comments-empty" role="status">
-          No suggested comments were generated for this review.
+          <strong>No suggested comments</strong>
+          <p>The report can still be used for manual review when no comment draft is needed.</p>
         </div>
       ) : (
         <div className="comment-list">
@@ -97,7 +98,7 @@ export function SuggestedComments({ report }: SuggestedCommentsProps) {
                     ? "Copied"
                     : feedback[key] === "failed"
                       ? "Copy failed"
-                      : "Copy"}
+                      : "Copy comment"}
                 </button>
               </article>
             );
