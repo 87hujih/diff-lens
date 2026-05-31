@@ -29,6 +29,9 @@ func TestReportNormalizerBuildsDegradedRulesOnlyReport(t *testing.T) {
 	if len(report.Risks) != 1 || report.Risks[0].ID != "rule-auth-1" {
 		t.Fatalf("risks = %#v, want retained rule risk", report.Risks)
 	}
+	if len(report.Evidence) == 0 {
+		t.Fatal("evidence = empty, want context evidence snippets")
+	}
 	if report.Comments == nil {
 		t.Fatalf("comments = nil, want empty slice")
 	}
@@ -90,6 +93,9 @@ func TestReportNormalizerMergesOnlyWhenEvidenceOrRuleIdentityMatches(t *testing.
 	}
 	if report.Risks[1].Source != "ai" || report.Risks[1].ID != "ai-different-evidence" {
 		t.Fatalf("second risk = %#v, want distinct AI risk", report.Risks[1])
+	}
+	if len(report.Evidence) < 2 {
+		t.Fatalf("evidence = %#v, want rule/context evidence", report.Evidence)
 	}
 }
 

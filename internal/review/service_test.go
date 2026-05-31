@@ -27,10 +27,16 @@ func TestAnalyzeDemoEmitsStableEventOrder(t *testing.T) {
 
 	assertEventTypes(t, got, []review.EventType{
 		review.EventStep,
+		review.EventStep,
 		review.EventPR,
 		review.EventStep,
 		review.EventStep,
+		review.EventStep,
+		review.EventStep,
 		review.EventRules,
+		review.EventStep,
+		review.EventStep,
+		review.EventStep,
 		review.EventStep,
 		review.EventStep,
 		review.EventStep,
@@ -39,10 +45,16 @@ func TestAnalyzeDemoEmitsStableEventOrder(t *testing.T) {
 	})
 	assertStepSequence(t, got, []string{
 		"fetch_pr",
+		"fetch_pr",
+		"parse_diff",
 		"parse_diff",
 		"scan_rules",
+		"scan_rules",
+		"build_context",
 		"build_context",
 		"analyze_ai",
+		"analyze_ai",
+		"result",
 		"result",
 	})
 }

@@ -80,13 +80,16 @@ LLM Analyzer 生成结构化 Review 报告
       |
       v
 SSE Stream 返回进度和结果
+      |
+      v
+Frontend Review Dashboard 渲染报告、证据和建议评论
 ```
 
 详细设计见 [AI PR Review 助手设计文档](docs/superpowers/specs/2026-05-29-ai-pr-review-design.md)。
 
 ## 本地启动与验证
 
-后端默认监听 `8080`：
+后端默认监听 `8080`，可通过 `PORT` 覆盖：
 
 ```bash
 go run ./cmd/server
@@ -110,10 +113,16 @@ npm --prefix frontend run preview:static
 
 ### 环境变量
 
+`PORT` 控制后端监听端口，默认值是 `8080`：
+
+```bash
+PORT=9090 go run ./cmd/server
+```
+
 `GITHUB_TOKEN` 是可选配置，用于提高 GitHub API rate limit，或访问 token 有权限读取的私有仓库。
 
 ```bash
-GITHUB_TOKEN=ghp_xxx go run ./cmd/server
+GITHUB_TOKEN=<github-token> go run ./cmd/server
 ```
 
 请求体中的 `github_token` 优先级高于环境变量 `GITHUB_TOKEN`。如果两者都提供，当前请求会使用 `github_token`；如果请求体没有提供 token，后端会回退使用 `GITHUB_TOKEN`。
@@ -124,7 +133,7 @@ LLM 配置使用 OpenAI 兼容 Chat Completions API：
 
 ```bash
 LLM_BASE_URL=https://api.deepseek.com
-LLM_API_KEY=replace-me
+LLM_API_KEY=replace-with-token
 LLM_MODEL=deepseek-chat
 ```
 
@@ -156,7 +165,7 @@ npm --prefix frontend run build
 npm --prefix frontend run preview:static
 ```
 
-打开 Vite 输出的本地地址，通常是 `http://localhost:5173`。在页面中点击 `Run demo`，用于验证：
+打开 Vite 输出的本地地址，通常是 `http://localhost:5173`。在页面中点击 `Demo PR`，用于验证：
 
 - Pipeline 时间线持续接收 SSE 事件。
 - `Review Brief` 使用 `result` 中的归一化报告，而不是直接展示模型原始输出。
@@ -187,7 +196,7 @@ curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
 ```bash
 curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
   -H "Content-Type: application/json" \
-  --data "{\"pr_url\":\"https://github.com/{owner}/{repo}/pull/{number}\",\"github_token\":\"ghp_xxx\",\"demo\":false}"
+  --data "{\"pr_url\":\"https://github.com/{owner}/{repo}/pull/{number}\",\"github_token\":\"<github-token>\",\"demo\":false}"
 ```
 
 未配置 `LLM_API_KEY` 时，真实模式仍应输出：
@@ -204,12 +213,26 @@ curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
 
 ## 当前限制
 
+- diff-lens 不会自动向 GitHub PR 写评论；`Suggested Comments` 需要 reviewer 复制后人工发布。
+- 当前不做 OAuth、多用户账号、数据库历史记录或 GitHub App 安装流程。
 - 规则扫描是语言无关的启发式检查，第一阶段不覆盖完整 AST 语义、跨文件调用图、复杂 SQL/命令拼接或所有错误处理缺陷。
 - GitHub 可能省略大型文件或二进制文件 patch；这类文件会保留文件名和状态，但不会伪造 diff 证据。
 - ContextBuilder 会裁剪大型 PR。`result.meta.context_truncated`、`omitted_files_count` 和 `omitted_snippets_count` 会说明上下文是否被裁剪。
 - LLM 未配置、请求失败、响应非法或模型输出 JSON 不合法时，真实模式返回 degraded report，并通过 `result.meta.degraded_reason` 说明原因。
 - AI 风险必须有可验证证据引用；证据不足的问题会被降级或丢弃。
-- demo 模式仍会输出完整演示报告，适合比赛演示和本地体验。
+- 模型输出需要人工复核，不能直接当作最终代码审查结论。
+- demo 模式仍会输出完整演示报告，适合比赛演示和本地体验；demo 数据不是真实 AI 分析结果。
+
+## 常见问题
+
+**遇到 GitHub rate limit 怎么办？**
+为后端配置 `GITHUB_TOKEN=<github-token>`，或在单次请求中传入 `github_token`。不要把真实 token 写入文档、日志或提交记录。
+
+**没有配置 `LLM_API_KEY` 会怎样？**
+真实模式会返回 degraded report，保留规则扫描发现的风险，并在 `result.meta.degraded_reason` 标明 `llm_not_configured`。
+
+**为什么某些文件没有 diff 证据？**
+GitHub 可能省略二进制文件、大文件或过大的 patch。diff-lens 会保留文件状态和降级信息，但不会伪造不存在的代码证据。
 
 PR 质量检查脚本会校验：
 
