@@ -12,6 +12,7 @@ import (
 	"diff-lens/internal/review"
 )
 
+// TestAnalyzeWithoutAPIKeyReturnsErrNotConfigured 验证对应场景的行为是否符合预期。
 func TestAnalyzeWithoutAPIKeyReturnsErrNotConfigured(t *testing.T) {
 	analyzer := NewAnalyzer("https://llm.example", "", "gpt-test")
 
@@ -21,6 +22,7 @@ func TestAnalyzeWithoutAPIKeyReturnsErrNotConfigured(t *testing.T) {
 	}
 }
 
+// TestAnalyzePostsOpenAICompatibleRequestAndParsesAnalysis 验证对应场景的行为是否符合预期。
 func TestAnalyzePostsOpenAICompatibleRequestAndParsesAnalysis(t *testing.T) {
 	var capturedPath string
 	var capturedAuth string
@@ -110,6 +112,7 @@ func TestAnalyzePostsOpenAICompatibleRequestAndParsesAnalysis(t *testing.T) {
 	}
 }
 
+// TestAnalyzeClassifiesTransportAndResponseErrorsWithoutLeakingAPIKey 验证对应场景的行为是否符合预期。
 func TestAnalyzeClassifiesTransportAndResponseErrorsWithoutLeakingAPIKey(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -148,12 +151,15 @@ func TestAnalyzeClassifiesTransportAndResponseErrorsWithoutLeakingAPIKey(t *test
 	}
 }
 
+// TestAnalyzeRejectsInvalidModelOutput 验证对应场景的行为是否符合预期。
 func TestAnalyzeRejectsInvalidModelOutput(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
 	}{
 		{name: "invalid json", content: `not json`},
+		{name: "trailing prose after json", content: `{"summary":"x","risks":[],"comments":[],"attention_items":[],"meta":{"completed":true}}
+Here is why secret-token should not be accepted.`},
 		{name: "missing risk evidence refs", content: `{"summary":"x","risks":[{"id":"ai-1","severity":"high","confidence":0.7,"category":"auth","title":"missing refs","reason":"x","suggestion":"y"}],"comments":[]}`},
 		{name: "wrong evidence refs type", content: `{"summary":"x","risks":[{"id":"ai-1","severity":"high","confidence":0.7,"category":"auth","title":"bad refs","evidence_refs":"snippet-auth-1","reason":"x","suggestion":"y"}],"comments":[]}`},
 	}
@@ -184,6 +190,7 @@ func TestAnalyzeRejectsInvalidModelOutput(t *testing.T) {
 	}
 }
 
+// sampleReviewContext 构造测试使用的样例数据。
 func sampleReviewContext() review.ReviewContext {
 	return review.ReviewContext{
 		SchemaVersion: review.ReviewContextSchemaVersion,
@@ -240,6 +247,7 @@ func sampleReviewContext() review.ReviewContext {
 	}
 }
 
+// messageContents 是测试辅助函数。
 func messageContents(messages []chatMessage) []string {
 	contents := make([]string, 0, len(messages))
 	for _, message := range messages {
@@ -248,6 +256,7 @@ func messageContents(messages []chatMessage) []string {
 	return contents
 }
 
+// openAIResponseWithContent 是测试辅助函数。
 func openAIResponseWithContent(content string) chatCompletionResponse {
 	return chatCompletionResponse{
 		Choices: []chatCompletionChoice{{

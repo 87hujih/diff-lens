@@ -2,10 +2,12 @@ package config_test
 
 import (
 	"testing"
+	"time"
 
 	"diff-lens/internal/config"
 )
 
+// TestLoadUsesDefaults 验证对应场景的行为是否符合预期。
 func TestLoadUsesDefaults(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("GITHUB_TOKEN", "")
@@ -24,8 +26,15 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.LLMModel != "deepseek-chat" {
 		t.Fatalf("LLMModel = %q, want %q", cfg.LLMModel, "deepseek-chat")
 	}
+	if cfg.GitHubTimeout != 15*time.Second {
+		t.Fatalf("GitHubTimeout = %v, want %v", cfg.GitHubTimeout, 15*time.Second)
+	}
+	if cfg.LLMTimeout != 45*time.Second {
+		t.Fatalf("LLMTimeout = %v, want %v", cfg.LLMTimeout, 45*time.Second)
+	}
 }
 
+// TestLoadReadsEnvironment 验证对应场景的行为是否符合预期。
 func TestLoadReadsEnvironment(t *testing.T) {
 	t.Setenv("PORT", "9090")
 	t.Setenv("GITHUB_TOKEN", "ghp_test")

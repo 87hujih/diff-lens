@@ -14,9 +14,10 @@ import (
 	"diff-lens/internal/review"
 )
 
+// defaultBaseURL 是 OpenAI 兼容 chat completions API 的默认根地址。
 const defaultBaseURL = "https://api.openai.com"
 
-// Analyzer 保存 OpenAI 兼容模型配置，供 LLM review 调用使用。
+// Analyzer 保存 OpenAI 兼容模型配置，供 LLM 评审调用使用。
 type Analyzer struct {
 	baseURL    string
 	apiKey     string
@@ -34,6 +35,7 @@ func NewAnalyzer(baseURL string, apiKey string, model string) *Analyzer {
 	})
 }
 
+// NewAnalyzerWithOptions 支持测试注入 HTTP 客户端和超时配置。
 func NewAnalyzerWithOptions(options AnalyzerOptions) *Analyzer {
 	baseURL := strings.TrimRight(strings.TrimSpace(options.BaseURL), "/")
 	if baseURL == "" {
@@ -54,6 +56,7 @@ func NewAnalyzerWithOptions(options AnalyzerOptions) *Analyzer {
 	}
 }
 
+// Analyze 调用 OpenAI 兼容接口，并验证模型返回的结构化分析。
 func (a *Analyzer) Analyze(ctx context.Context, input review.ReviewContext) (review.ReviewAnalysis, error) {
 	if strings.TrimSpace(a.apiKey) == "" {
 		return review.ReviewAnalysis{}, AnalyzerError{Err: ErrNotConfigured, Reason: "llm_not_configured"}
@@ -112,6 +115,7 @@ func (a *Analyzer) Analyze(ctx context.Context, input review.ReviewContext) (rev
 	return analysis, nil
 }
 
+// buildMessages 把受控上下文包进系统提示和用户消息，降低提示注入影响。
 func buildMessages(input review.ReviewContext) []chatMessage {
 	system := strings.Join([]string{
 		"You are diff-lens, an AI code review analyzer.",
@@ -139,6 +143,7 @@ func buildMessages(input review.ReviewContext) []chatMessage {
 	}
 }
 
+// promptPayloadFromContext 只传递模型需要的字段，避免泄漏内部结构。
 func promptPayloadFromContext(input review.ReviewContext) promptPayload {
 	return promptPayload{
 		PRSummary: promptPRSummary{
@@ -160,6 +165,7 @@ func promptPayloadFromContext(input review.ReviewContext) promptPayload {
 	}
 }
 
+// promptPayload 是发送给模型的裁剪后 JSON 载荷。
 type promptPayload struct {
 	PRSummary    promptPRSummary     `json:"pr_summary"`
 	Stats        review.ContextStats `json:"stats"`
@@ -168,6 +174,7 @@ type promptPayload struct {
 	EvidenceRefs []string            `json:"evidence_refs"`
 }
 
+// promptPRSummary 保留模型判断风险所需的 PR 摘要。
 type promptPRSummary struct {
 	Title        string `json:"title"`
 	Author       string `json:"author"`
@@ -181,6 +188,7 @@ type promptPRSummary struct {
 	Commits      int    `json:"commits"`
 }
 
+// promptRuleRisk 是规则风险在提示词中的最小表示。
 type promptRuleRisk struct {
 	ID           string   `json:"id"`
 	Severity     string   `json:"severity"`
@@ -195,6 +203,7 @@ type promptRuleRisk struct {
 	Suggestion   string   `json:"suggestion"`
 }
 
+// promptFile 是变更文件和证据片段在提示词中的最小表示。
 type promptFile struct {
 	Filename     string                  `json:"filename"`
 	Kind         string                  `json:"kind"`
@@ -206,6 +215,7 @@ type promptFile struct {
 	PatchOmitted bool                    `json:"patch_omitted,omitempty"`
 }
 
+// sanitizeRuleRisks 复制规则风险，避免模型层修改共享切片。
 func sanitizeRuleRisks(risks []review.Risk) []promptRuleRisk {
 	out := make([]promptRuleRisk, 0, len(risks))
 	for _, risk := range risks {
@@ -226,6 +236,7 @@ func sanitizeRuleRisks(risks []review.Risk) []promptRuleRisk {
 	return out
 }
 
+// sanitizeFiles 复制上下文文件和 snippet，保持提示构建过程无副作用。
 func sanitizeFiles(files []review.ContextFile) []promptFile {
 	out := make([]promptFile, 0, len(files))
 	for _, file := range files {
@@ -245,11 +256,16 @@ func sanitizeFiles(files []review.ContextFile) []promptFile {
 	return out
 }
 
+// parseModelOutput 严格校验模型 JSON，防止不完整分析进入报告。
 func parseModelOutput(content string) (review.ReviewAnalysis, error) {
 	var analysis review.ReviewAnalysis
 	decoder := json.NewDecoder(strings.NewReader(content))
 	if err := decoder.Decode(&analysis); err != nil {
 		return review.ReviewAnalysis{}, AnalyzerError{Err: ErrModelOutputInvalid, Reason: "llm_output_invalid", Detail: "decode content"}
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return review.ReviewAnalysis{}, AnalyzerError{Err: ErrModelOutputInvalid, Reason: "llm_output_invalid", Detail: "trailing content"}
 	}
 	if strings.TrimSpace(analysis.Summary) == "" {
 		return review.ReviewAnalysis{}, AnalyzerError{Err: ErrModelOutputInvalid, Reason: "llm_output_invalid", Detail: "missing summary"}
@@ -273,6 +289,7 @@ func parseModelOutput(content string) (review.ReviewAnalysis, error) {
 	return analysis, nil
 }
 
+// chatCompletionsURL 规范化 OpenAI 兼容服务的 chat completions 地址。
 func chatCompletionsURL(baseURL string) (string, error) {
 	parsed, err := url.Parse(strings.TrimRight(baseURL, "/") + "/v1/chat/completions")
 	if err != nil {
@@ -284,6 +301,7 @@ func chatCompletionsURL(baseURL string) (string, error) {
 	return parsed.String(), nil
 }
 
+// cloneStrings 复制字符串切片，避免调用方意外共享底层数组。
 func cloneStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil

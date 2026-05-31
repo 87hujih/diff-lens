@@ -13,9 +13,11 @@ import (
 	"time"
 )
 
+// GitHub REST 客户端默认分页和基础地址配置。
 const (
-	defaultBaseURL = "https://api.github.com"
-	perPage        = 100
+	defaultBaseURL       = "https://api.github.com"
+	defaultGitHubTimeout = 15 * time.Second
+	perPage              = 100
 )
 
 // PRRef 是标准化后的仓库和 PR 标识。
@@ -25,19 +27,19 @@ type PRRef struct {
 	Number int
 }
 
-// Client fetches pull request data from the GitHub REST API.
+// Client 从 GitHub REST API 获取 PR 数据。
 type Client struct {
 	token      string
 	baseURL    string
 	httpClient *http.Client
 }
 
-// NewClient creates a GitHub client using the default API base URL.
+// NewClient 使用默认 API 基础 URL 创建 GitHub 客户端。
 func NewClient(token string) *Client {
 	return NewClientWithOptions(ClientOptions{Token: token})
 }
 
-// NewClientWithOptions creates a GitHub client with injectable transport settings.
+// NewClientWithOptions 使用可注入的传输配置创建 GitHub 客户端。
 func NewClientWithOptions(options ClientOptions) *Client {
 	baseURL := strings.TrimRight(options.BaseURL, "/")
 	if baseURL == "" {
@@ -46,7 +48,11 @@ func NewClientWithOptions(options ClientOptions) *Client {
 
 	httpClient := options.HTTPClient
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		timeout := options.Timeout
+		if timeout == 0 {
+			timeout = defaultGitHubTimeout
+		}
+		httpClient = &http.Client{Timeout: timeout}
 	}
 
 	return &Client{
@@ -56,7 +62,7 @@ func NewClientWithOptions(options ClientOptions) *Client {
 	}
 }
 
-// FetchPullRequest fetches PR metadata, changed files, and commits from GitHub.
+// FetchPullRequest 从 GitHub 获取 PR 元数据、变更文件和提交。
 func (c *Client) FetchPullRequest(ctx context.Context, ref PRRef) (PullRequestData, error) {
 	pr, err := c.fetchPullRequestMetadata(ctx, ref)
 	if err != nil {
@@ -123,6 +129,7 @@ func ParsePRURL(rawURL string) (PRRef, error) {
 	return PRRef{Owner: parts[0], Repo: parts[1], Number: number}, nil
 }
 
+// pullRequestResponse 只声明评审流程需要的 PR 元数据字段。
 type pullRequestResponse struct {
 	Number       int    `json:"number"`
 	Title        string `json:"title"`
@@ -135,14 +142,17 @@ type pullRequestResponse struct {
 	Commits      int    `json:"commits"`
 }
 
+// user 映射 GitHub 响应中的用户登录名。
 type user struct {
 	Login string `json:"login"`
 }
 
+// branch 映射 PR head/base 分支引用。
 type branch struct {
 	Ref string `json:"ref"`
 }
 
+// pullRequestFileResponse 映射 GitHub PR 文件列表响应。
 type pullRequestFileResponse struct {
 	Filename  string `json:"filename"`
 	Status    string `json:"status"`
@@ -152,6 +162,7 @@ type pullRequestFileResponse struct {
 	Patch     string `json:"patch"`
 }
 
+// pullRequestCommitResponse 映射 GitHub PR commit 列表响应。
 type pullRequestCommitResponse struct {
 	SHA    string `json:"sha"`
 	Commit struct {
@@ -164,6 +175,7 @@ type pullRequestCommitResponse struct {
 	Author user `json:"author"`
 }
 
+// fetchPullRequestMetadata 获取单个 PR 的主体元数据。
 func (c *Client) fetchPullRequestMetadata(ctx context.Context, ref PRRef) (pullRequestResponse, error) {
 	var pr pullRequestResponse
 	_, err := c.getJSON(ctx, c.endpoint(ref, ""), nil, &pr)
@@ -173,6 +185,7 @@ func (c *Client) fetchPullRequestMetadata(ctx context.Context, ref PRRef) (pullR
 	return pr, nil
 }
 
+// fetchPullRequestFiles 获取并标准化 PR 的全部变更文件。
 func (c *Client) fetchPullRequestFiles(ctx context.Context, ref PRRef) ([]PullRequestFile, error) {
 	rawFiles, err := fetchPaginated[pullRequestFileResponse](ctx, c, c.endpoint(ref, "files"))
 	if err != nil {
@@ -193,6 +206,7 @@ func (c *Client) fetchPullRequestFiles(ctx context.Context, ref PRRef) ([]PullRe
 	return files, nil
 }
 
+// fetchPullRequestCommits 获取并标准化 PR 的全部提交。
 func (c *Client) fetchPullRequestCommits(ctx context.Context, ref PRRef) ([]PullRequestCommit, error) {
 	rawCommits, err := fetchPaginated[pullRequestCommitResponse](ctx, c, c.endpoint(ref, "commits"))
 	if err != nil {
@@ -217,6 +231,7 @@ func (c *Client) fetchPullRequestCommits(ctx context.Context, ref PRRef) ([]Pull
 	return commits, nil
 }
 
+// fetchPaginated 拉取 GitHub 分页资源，优先使用 Link 头并兜底递增 page。
 func fetchPaginated[T any](ctx context.Context, c *Client, firstURL string) ([]T, error) {
 	var all []T
 	nextURL := firstURL
@@ -249,6 +264,7 @@ func fetchPaginated[T any](ctx context.Context, c *Client, firstURL string) ([]T
 	return all, nil
 }
 
+// getJSON 统一设置 GitHub 请求头、鉴权和状态码映射。
 func (c *Client) getJSON(ctx context.Context, rawURL string, defaultQuery url.Values, target any) (http.Header, error) {
 	requestURL, err := applyDefaultQuery(rawURL, defaultQuery)
 	if err != nil {
@@ -284,6 +300,7 @@ func (c *Client) getJSON(ctx context.Context, rawURL string, defaultQuery url.Va
 	return resp.Header, nil
 }
 
+// endpoint 根据 PR 标识拼接 REST API 端点。
 func (c *Client) endpoint(ref PRRef, suffix string) string {
 	apiPath := path.Join(
 		"/repos",
@@ -297,6 +314,7 @@ func (c *Client) endpoint(ref PRRef, suffix string) string {
 	return c.baseURL + apiPath
 }
 
+// paginationQuery 构造 GitHub 列表接口的分页参数。
 func paginationQuery(page int) url.Values {
 	query := url.Values{}
 	query.Set("page", strconv.Itoa(page))
@@ -304,6 +322,7 @@ func paginationQuery(page int) url.Values {
 	return query
 }
 
+// applyDefaultQuery 只为缺失参数填入默认值，避免覆盖 Link 里的查询。
 func applyDefaultQuery(rawURL string, defaults url.Values) (string, error) {
 	if len(defaults) == 0 {
 		return rawURL, nil
@@ -327,6 +346,7 @@ func applyDefaultQuery(rawURL string, defaults url.Values) (string, error) {
 	return parsed.String(), nil
 }
 
+// nextPageURL 在没有 Link 头时根据当前 URL 推导下一页。
 func nextPageURL(rawURL string) (string, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -344,6 +364,7 @@ func nextPageURL(rawURL string) (string, error) {
 	return parsed.String(), nil
 }
 
+// nextLink 从 RFC 5988 Link 头中提取 rel="next" URL。
 func nextLink(linkHeader string) string {
 	for _, part := range strings.Split(linkHeader, ",") {
 		sections := strings.Split(part, ";")
@@ -366,6 +387,7 @@ func nextLink(linkHeader string) string {
 	return ""
 }
 
+// mapGitHubStatus 将 HTTP 状态码归类为领域错误，供服务层展示。
 func mapGitHubStatus(resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusNotFound:
@@ -382,6 +404,7 @@ func mapGitHubStatus(resp *http.Response) error {
 	}
 }
 
+// parseGitHubTimestamp 解析 GitHub commit author 时间戳。
 func parseGitHubTimestamp(raw string) (time.Time, error) {
 	if raw == "" {
 		return time.Time{}, nil

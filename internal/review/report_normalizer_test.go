@@ -6,6 +6,7 @@ import (
 	"diff-lens/internal/review"
 )
 
+// TestReportNormalizerBuildsDegradedRulesOnlyReport 验证对应场景的行为是否符合预期。
 func TestReportNormalizerBuildsDegradedRulesOnlyReport(t *testing.T) {
 	normalizer := review.NewReportNormalizer()
 	pr := normalizerPR()
@@ -37,6 +38,7 @@ func TestReportNormalizerBuildsDegradedRulesOnlyReport(t *testing.T) {
 	}
 }
 
+// TestReportNormalizerMergesOnlyWhenEvidenceOrRuleIdentityMatches 验证对应场景的行为是否符合预期。
 func TestReportNormalizerMergesOnlyWhenEvidenceOrRuleIdentityMatches(t *testing.T) {
 	normalizer := review.NewReportNormalizer()
 	pr := normalizerPR()
@@ -99,6 +101,7 @@ func TestReportNormalizerMergesOnlyWhenEvidenceOrRuleIdentityMatches(t *testing.
 	}
 }
 
+// TestReportNormalizerRejectsAIHighMediumRisksWithoutValidEvidenceRefs 验证对应场景的行为是否符合预期。
 func TestReportNormalizerRejectsAIHighMediumRisksWithoutValidEvidenceRefs(t *testing.T) {
 	normalizer := review.NewReportNormalizer()
 	pr := normalizerPR()
@@ -158,6 +161,7 @@ func TestReportNormalizerRejectsAIHighMediumRisksWithoutValidEvidenceRefs(t *tes
 	}
 }
 
+// TestReportNormalizerDerivesMetaRiskLevelAndComments 验证对应场景的行为是否符合预期。
 func TestReportNormalizerDerivesMetaRiskLevelAndComments(t *testing.T) {
 	normalizer := review.NewReportNormalizer()
 	pr := normalizerPR()
@@ -205,6 +209,73 @@ func TestReportNormalizerDerivesMetaRiskLevelAndComments(t *testing.T) {
 	}
 }
 
+// TestReportNormalizerRejectsAICommentsWithoutValidEvidenceRefs 验证 AI 评论必须有有效证据引用和可用定位。
+func TestReportNormalizerRejectsAICommentsWithoutValidEvidenceRefs(t *testing.T) {
+	normalizer := review.NewReportNormalizer()
+	pr := normalizerPR()
+	ctx := normalizerContext()
+
+	analysis := review.ReviewAnalysis{
+		Summary: "AI summary",
+		Comments: []review.AnalysisComment{
+			{
+				ID:           "comment-valid",
+				File:         "internal/auth/session.go",
+				Line:         42,
+				Body:         "Please revisit this authorization path.",
+				EvidenceRefs: []string{"snippet-auth-1"},
+			},
+			{
+				ID:           "comment-missing-ref",
+				File:         "internal/auth/session.go",
+				Line:         42,
+				Body:         "This cites evidence that was not in context.",
+				EvidenceRefs: []string{"missing-snippet"},
+			},
+			{
+				ID:           "comment-no-ref",
+				File:         "internal/auth/session.go",
+				Line:         42,
+				Body:         "This has no support.",
+				EvidenceRefs: nil,
+			},
+			{
+				ID:           "",
+				File:         "internal/auth/session.go",
+				Line:         42,
+				Body:         "This has no ID.",
+				EvidenceRefs: []string{"snippet-auth-1"},
+			},
+			{
+				ID:           "comment-blank-body",
+				File:         "internal/auth/session.go",
+				Line:         42,
+				Body:         "   ",
+				EvidenceRefs: []string{"snippet-auth-1"},
+			},
+			{
+				ID:           "comment-line-without-file",
+				Line:         42,
+				Body:         "A line without a file cannot be copied safely.",
+				EvidenceRefs: []string{"snippet-auth-1"},
+			},
+		},
+	}
+
+	report := normalizer.Normalize(pr, nil, analysis, ctx, review.ReportNormalizerOptions{AICompleted: true})
+
+	if len(report.Comments) != 1 {
+		t.Fatalf("comments = %#v, want only comment with valid evidence refs", report.Comments)
+	}
+	if report.Comments[0].ID != "comment-valid" {
+		t.Fatalf("comment = %#v, want comment-valid", report.Comments[0])
+	}
+	if report.Comments[0].EvidenceRefs[0] != "snippet-auth-1" {
+		t.Fatalf("comment evidence refs = %#v, want snippet-auth-1", report.Comments[0].EvidenceRefs)
+	}
+}
+
+// normalizerPR 构造或提取测试所需的数据结构。
 func normalizerPR() review.PRInfo {
 	return review.PRInfo{
 		Title:        "Harden auth",
@@ -220,6 +291,7 @@ func normalizerPR() review.PRInfo {
 	}
 }
 
+// normalizerRuleRisk 是测试辅助函数。
 func normalizerRuleRisk() review.Risk {
 	return review.Risk{
 		ID:           "rule-auth-1",
@@ -237,6 +309,7 @@ func normalizerRuleRisk() review.Risk {
 	}
 }
 
+// normalizerContext 构造或提取测试所需的数据结构。
 func normalizerContext() review.ReviewContext {
 	return review.ReviewContext{
 		SchemaVersion: "review-context/v1",
