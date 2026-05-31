@@ -1,6 +1,6 @@
 import type { AnalyzeRequest, ReviewEvent, ReviewEventType } from "../types/review";
 
-// EventHandler 让 UI 状态管理与事件流解析解耦。
+// EventHandler 让界面状态管理与事件流解析解耦。
 type EventHandler = (event: ReviewEvent) => void;
 
 // analyzeReviewStream 发送分析请求，并把解析后的 SSE 消息交给调用方。
@@ -40,7 +40,7 @@ export async function analyzeReviewStream(
         break;
       }
 
-      // SSE chunk 可能截断在消息中间，因此保留最后一个未完整帧。
+      // SSE 数据块可能截断在消息中间，因此保留最后一个未完整帧。
       buffer += decoder.decode(value, { stream: true });
       const messages = buffer.split(/\r?\n\r?\n/);
       buffer = messages.pop() ?? "";
@@ -70,12 +70,13 @@ export async function analyzeReviewStream(
   }
 }
 
+// isAbortError 将主动取消请求视作静默结束。
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
 // parseSSEMessage 处理标准 SSE event/data 帧格式。
-function parseSSEMessage(message: string): ReviewEvent | null {
+export function parseSSEMessage(message: string): ReviewEvent | null {
   let eventType: ReviewEventType | null = null;
   const dataLines: string[] = [];
 

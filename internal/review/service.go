@@ -80,6 +80,7 @@ type ServiceOptions struct {
 	DefaultGitHubToken  string
 	DiffParser          DiffParser
 	RuleScanner         RuleScanner
+	RulesScanner        RuleScanner
 	ContextBuilder      ReviewContextBuilder
 	AIAnalyzer          AIAnalyzer
 	ReportGenerator     ReportGenerator
@@ -104,6 +105,9 @@ func NewService(options ServiceOptions) *Service {
 		parser = diff.NewParser()
 	}
 	scanner := options.RuleScanner
+	if scanner == nil {
+		scanner = options.RulesScanner
+	}
 	if scanner == nil {
 		scanner = rules.NewScanner()
 	}
@@ -412,13 +416,15 @@ func diffInputsFromPullRequest(data github.PullRequestData) []diff.FileInput {
 	inputs := make([]diff.FileInput, 0, len(data.Files))
 	for _, file := range data.Files {
 		inputs = append(inputs, diff.FileInput{
-			Filename:     file.Filename,
-			Status:       file.Status,
-			Additions:    file.Additions,
-			Deletions:    file.Deletions,
-			Changes:      file.Changes,
-			Patch:        file.Patch,
-			PatchMissing: file.Patch == "" && file.Changes > 0,
+			Filename:  file.Filename,
+			Status:    file.Status,
+			Additions: file.Additions,
+			Deletions: file.Deletions,
+			Changes:   file.Changes,
+			Patch:     file.Patch,
+			// github.PullRequestFile does not currently expose whether a
+			// missing patch was binary or omitted, so keep this false.
+			PatchBinaryOrOmitted: false,
 		})
 	}
 	return inputs

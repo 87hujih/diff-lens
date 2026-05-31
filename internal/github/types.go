@@ -6,34 +6,36 @@ import (
 	"time"
 )
 
+// GitHub 领域错误集中声明，便于服务层用 errors.Is 做分类。
 var (
-	// ErrInvalidPRURL indicates the input is not a valid GitHub pull request URL.
+	// ErrInvalidPRURL 表示输入不是有效的 GitHub PR URL。
 	ErrInvalidPRURL = errors.New("invalid GitHub pull request URL")
 
-	// ErrPRNotFound indicates GitHub returned no pull request for the requested ref.
+	// ErrPRNotFound 表示 GitHub 没有返回请求标识对应的 PR。
 	ErrPRNotFound = errors.New("github pull request not found")
 
-	// ErrGitHubUnauthorized indicates GitHub rejected the request credentials.
+	// ErrGitHubUnauthorized 表示 GitHub 拒绝了请求凭据。
 	ErrGitHubUnauthorized = errors.New("github unauthorized")
 
-	// ErrGitHubRateLimited indicates GitHub rejected the request because of rate limiting.
+	// ErrGitHubRateLimited 表示 GitHub 因限流拒绝了请求。
 	ErrGitHubRateLimited = errors.New("github rate limited")
 
-	// ErrGitHubRequestFailed indicates the client could not complete the GitHub request.
+	// ErrGitHubRequestFailed 表示客户端未能完成 GitHub 请求。
 	ErrGitHubRequestFailed = errors.New("github request failed")
 
-	// ErrGitHubResponseInvalid indicates GitHub returned a response the client could not decode.
+	// ErrGitHubResponseInvalid 表示 GitHub 返回了客户端无法解码的响应。
 	ErrGitHubResponseInvalid = errors.New("github response invalid")
 )
 
-// ClientOptions contains optional GitHub client configuration for future REST calls.
+// ClientOptions 包含 GitHub 客户端发起 REST 调用时使用的可选配置。
 type ClientOptions struct {
 	BaseURL    string
 	Token      string
 	HTTPClient *http.Client
+	Timeout    time.Duration
 }
 
-// PullRequestData is the normalized GitHub pull request payload needed by review analysis.
+// PullRequestData 是评审分析所需的标准化 GitHub PR 载荷。
 type PullRequestData struct {
 	Ref          PRRef
 	Title        string
@@ -50,7 +52,7 @@ type PullRequestData struct {
 	Commits      []PullRequestCommit
 }
 
-// PullRequestFile describes one changed file in a pull request.
+// PullRequestFile 描述 PR 中的一个变更文件。
 type PullRequestFile struct {
 	Filename  string
 	Status    string
@@ -60,7 +62,7 @@ type PullRequestFile struct {
 	Patch     string
 }
 
-// PullRequestCommit describes one commit included in a pull request.
+// PullRequestCommit 描述 PR 包含的一个提交。
 type PullRequestCommit struct {
 	SHA         string
 	Message     string

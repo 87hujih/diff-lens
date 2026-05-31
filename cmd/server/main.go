@@ -13,19 +13,28 @@ import (
 	"diff-lens/internal/rules"
 )
 
+// main 组装配置、服务依赖和 HTTP 路由后启动进程。
 func main() {
-	// 将支持演示模式的 review 服务接入 HTTP 路由。
+	// 将支持演示模式的评审服务接入 HTTP 路由。
 	cfg := config.Load()
 	service := review.NewService(review.ServiceOptions{
 		DemoProvider:       demo.NewProvider(),
 		DefaultGitHubToken: cfg.GitHubToken,
 		GitHubClientFactory: func(token string) review.GitHubClient {
-			return github.NewClient(token)
+			return github.NewClientWithOptions(github.ClientOptions{
+				Token:   token,
+				Timeout: cfg.GitHubTimeout,
+			})
 		},
-		DiffParser:      diff.NewParser(),
-		RuleScanner:     rules.NewScanner(),
-		ContextBuilder:  review.NewContextBuilder(review.ContextBuilderOptions{}),
-		AIAnalyzer:      llm.NewAnalyzer(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel),
+		DiffParser:     diff.NewParser(),
+		RuleScanner:    rules.NewScanner(),
+		ContextBuilder: review.NewContextBuilder(review.ContextBuilderOptions{}),
+		AIAnalyzer: llm.NewAnalyzerWithOptions(llm.AnalyzerOptions{
+			BaseURL: cfg.LLMBaseURL,
+			APIKey:  cfg.LLMAPIKey,
+			Model:   cfg.LLMModel,
+			Timeout: cfg.LLMTimeout,
+		}),
 		ReportGenerator: review.NewReportNormalizer(),
 	})
 	router := handler.NewRouter(service)

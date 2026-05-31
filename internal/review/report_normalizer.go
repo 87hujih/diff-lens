@@ -5,22 +5,22 @@ import (
 	"strings"
 )
 
-// ReportNormalizerOptions controls report stage completion metadata.
+// ReportNormalizerOptions 控制报告阶段完成状态的元数据。
 type ReportNormalizerOptions struct {
 	AICompleted    bool
 	RulesCompleted bool
 	DegradedReason string
 }
 
-// ReportNormalizer merges deterministic rules and validated AI analysis.
+// ReportNormalizer 合并确定性规则和已验证的 AI 分析结果。
 type ReportNormalizer struct{}
 
-// NewReportNormalizer creates a report normalizer.
+// NewReportNormalizer 创建报告归一化器。
 func NewReportNormalizer() *ReportNormalizer {
 	return &ReportNormalizer{}
 }
 
-// Normalize builds a final report from rule risks, AI analysis, and context.
+// Normalize 根据规则风险、AI 分析和上下文构建最终报告。
 func (n *ReportNormalizer) Normalize(pr PRInfo, ruleRisks []Risk, ai ReviewAnalysis, ctx ReviewContext, options ReportNormalizerOptions) Report {
 	risks := normalizeRuleRisks(ruleRisks)
 	validEvidence := evidenceSet(ctx)
@@ -44,7 +44,7 @@ func (n *ReportNormalizer) Normalize(pr PRInfo, ruleRisks []Risk, ai ReviewAnaly
 		}
 	}
 
-	comments := normalizeComments(ai.Comments)
+	comments := normalizeComments(ai.Comments, validEvidence)
 	overview := ai.Summary
 	if overview == "" {
 		overview = "规则扫描已完成，AI 未返回摘要。"
@@ -66,7 +66,7 @@ func (n *ReportNormalizer) Normalize(pr PRInfo, ruleRisks []Risk, ai ReviewAnaly
 	}
 }
 
-// Degraded builds a rules-only report when AI analysis cannot complete.
+// Degraded 在 AI 分析无法完成时构建仅包含规则结果的报告。
 func (n *ReportNormalizer) Degraded(pr PRInfo, ruleRisks []Risk, ctx ReviewContext, reason string) Report {
 	risks := normalizeRuleRisks(ruleRisks)
 	return Report{
@@ -91,6 +91,7 @@ func (n *ReportNormalizer) Degraded(pr PRInfo, ruleRisks []Risk, ctx ReviewConte
 	}
 }
 
+// evidenceItemsFrom 汇总规则、AI 和上下文 snippet 的去重证据列表。
 func evidenceItemsFrom(risks []Risk, ctx ReviewContext) []EvidenceItem {
 	items := []EvidenceItem{}
 	seen := map[string]bool{}
@@ -138,6 +139,7 @@ func evidenceItemsFrom(risks []Risk, ctx ReviewContext) []EvidenceItem {
 	return items
 }
 
+// normalizeRuleRisks 复制规则风险并补齐缺省来源。
 func normalizeRuleRisks(ruleRisks []Risk) []Risk {
 	risks := cloneRisks(ruleRisks)
 	if risks == nil {
@@ -151,6 +153,7 @@ func normalizeRuleRisks(ruleRisks []Risk) []Risk {
 	return risks
 }
 
+// normalizeAIRisk 只接纳引用有效证据且定位充分的 AI 风险。
 func normalizeAIRisk(ai AIRisk, validEvidence map[string]bool) (Risk, bool) {
 	if len(ai.EvidenceRefs) == 0 || !allEvidenceRefsExist(ai.EvidenceRefs, validEvidence) {
 		return Risk{}, false
@@ -178,20 +181,34 @@ func normalizeAIRisk(ai AIRisk, validEvidence map[string]bool) (Risk, bool) {
 	}, true
 }
 
-func normalizeComments(comments []AnalysisComment) []SuggestedComment {
+// normalizeComments 将有证据支撑的 AI 评论转换为前端可复制的评论草稿。
+func normalizeComments(comments []AnalysisComment, validEvidence map[string]bool) []SuggestedComment {
 	out := make([]SuggestedComment, 0, len(comments))
 	for _, comment := range comments {
+		id := strings.TrimSpace(comment.ID)
+		body := strings.TrimSpace(comment.Body)
+		file := strings.TrimSpace(comment.File)
+		if id == "" || body == "" {
+			continue
+		}
+		if len(comment.EvidenceRefs) == 0 || !allEvidenceRefsExist(comment.EvidenceRefs, validEvidence) {
+			continue
+		}
+		if comment.Line != 0 && file == "" {
+			continue
+		}
 		out = append(out, SuggestedComment{
-			ID:           comment.ID,
-			File:         comment.File,
+			ID:           id,
+			File:         file,
 			Line:         comment.Line,
-			Body:         comment.Body,
+			Body:         body,
 			EvidenceRefs: cloneStrings(comment.EvidenceRefs),
 		})
 	}
 	return out
 }
 
+// shouldMergeRisk 判断 AI 风险是否和规则风险描述同一问题。
 func shouldMergeRisk(rule Risk, ai Risk) bool {
 	if rule.Category != ai.Category || rule.File != ai.File || rule.Line != ai.Line {
 		return false
@@ -202,6 +219,7 @@ func shouldMergeRisk(rule Risk, ai Risk) bool {
 	return hasEvidenceOverlap(rule.EvidenceRefs, ai.EvidenceRefs)
 }
 
+// mergeRisks 保留规则稳定 ID，同时使用 AI 补强标题、原因和建议。
 func mergeRisks(rule Risk, ai Risk) Risk {
 	merged := rule
 	merged.ID = rule.ID
@@ -228,6 +246,7 @@ func mergeRisks(rule Risk, ai Risk) Risk {
 	return merged
 }
 
+// evidenceSet 收集当前上下文中所有允许 AI 引用的证据 ID。
 func evidenceSet(ctx ReviewContext) map[string]bool {
 	out := map[string]bool{}
 	for _, ref := range ctx.EvidenceRefs {
@@ -249,6 +268,7 @@ func evidenceSet(ctx ReviewContext) map[string]bool {
 	return out
 }
 
+// allEvidenceRefsExist 确认 AI 输出没有引用不存在的证据。
 func allEvidenceRefsExist(refs []string, valid map[string]bool) bool {
 	for _, ref := range refs {
 		if ref == "" || !valid[ref] {
@@ -258,6 +278,7 @@ func allEvidenceRefsExist(refs []string, valid map[string]bool) bool {
 	return true
 }
 
+// hasEvidenceOverlap 用共享证据判断两条风险是否可合并。
 func hasEvidenceOverlap(left []string, right []string) bool {
 	for _, l := range left {
 		for _, r := range right {
@@ -269,6 +290,7 @@ func hasEvidenceOverlap(left []string, right []string) bool {
 	return false
 }
 
+// deriveRiskLevel 从所有风险中推导报告总风险级别。
 func deriveRiskLevel(risks []Risk) string {
 	level := "low"
 	for _, risk := range risks {
@@ -277,6 +299,7 @@ func deriveRiskLevel(risks []Risk) string {
 	return level
 }
 
+// higherSeverity 返回两个严重级别中更高的标准化值。
 func higherSeverity(left string, right string) string {
 	if severityRank(right) > severityRank(left) {
 		return normalizeSeverity(right)
@@ -284,6 +307,7 @@ func higherSeverity(left string, right string) string {
 	return normalizeSeverity(left)
 }
 
+// normalizeSeverity 将未知严重级别降为 low，避免前端状态爆炸。
 func normalizeSeverity(severity string) string {
 	switch severity {
 	case "high", "medium", "low":
@@ -293,6 +317,7 @@ func normalizeSeverity(severity string) string {
 	}
 }
 
+// reviewFocusFromRisks 合并 AI 关注点和风险标题形成评审清单。
 func reviewFocusFromRisks(risks []Risk, attention []string) []string {
 	focus := make([]string, 0, len(risks)+len(attention))
 	focus = append(focus, attention...)
@@ -307,6 +332,7 @@ func reviewFocusFromRisks(risks []Risk, attention []string) []string {
 	return focus
 }
 
+// metaFromContext 把上下文截断和阶段完成状态写入报告元数据。
 func metaFromContext(ctx ReviewContext, options ReportNormalizerOptions) ReportMeta {
 	return ReportMeta{
 		AICompleted:          options.AICompleted,
@@ -318,6 +344,7 @@ func metaFromContext(ctx ReviewContext, options ReportNormalizerOptions) ReportM
 	}
 }
 
+// stableRiskSuffix 为缺少 ID 的 AI 风险生成稳定后缀。
 func stableRiskSuffix(file string, line int, category string, title string) string {
 	return stableSnippetID(file, line, category+"\n"+title)[len(contextSnippetEvidencePrefix):]
 }

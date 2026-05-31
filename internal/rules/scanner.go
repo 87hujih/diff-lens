@@ -5,235 +5,344 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 
 	"diff-lens/internal/diff"
 )
 
 const (
-	largePRFileThreshold = 25
-	largePRLineThreshold = 1000
-	maxEvidenceLength    = 180
+	defaultSeverity   = "medium"
+	defaultConfidence = 0.8
+	maxEvidenceLength = 240
+
+	largePRFileCountThreshold = 50
+	largePRChangeThreshold    = 1000
 )
 
 var (
-	secretAssignmentPattern = regexp.MustCompile(`(?i)\b([a-z0-9_-]*(?:password|api[_-]?key|secret|token|private[_-]?key)[a-z0-9_-]*)\b(\s*[:=]\s*)(['"]?)([^'"\s]+)`)
-	privateKeyPattern       = regexp.MustCompile(`(?i)private key|begin [a-z ]*private key`)
-	rmRFPattern             = regexp.MustCompile(`(?i)\brm\s+-[a-z]*r[a-z]*f|rm\s+-[a-z]*f[a-z]*r`)
-	dropTablePattern        = regexp.MustCompile(`(?i)\bdrop\s+table\b`)
-	truncatePattern         = regexp.MustCompile(`(?i)\btruncate\b`)
-	deleteFromPattern       = regexp.MustCompile(`(?i)\bdelete\s+from\b`)
-	wherePattern            = regexp.MustCompile(`(?i)\bwhere\b`)
-	chmod777Pattern         = regexp.MustCompile(`(?i)\bchmod\s+777\b`)
-	forcePushPattern        = regexp.MustCompile(`(?i)\bgit\s+push\b.*(?:--force(?:-with-lease)?\b|\s-f\b)`)
+	sensitiveKeyPatternText = `[a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*|private(?:\s+|[_-]?)key`
+
+	doubleQuotedConfigSecretPattern         = regexp.MustCompile(`(?i)("(?:` + sensitiveKeyPatternText + `)")(\s*(?::=|[:=])\s*")([^"\r\n]*)(")`)
+	singleQuotedConfigSecretPattern         = regexp.MustCompile(`(?i)('(?:` + sensitiveKeyPatternText + `)')(\s*(?::=|[:=])\s*')([^'\r\n]*)(')`)
+	unquotedDoubleQuotedConfigSecretPattern = regexp.MustCompile(`(?i)("(?:` + sensitiveKeyPatternText + `)")(\s*(?::=|[:=])\s*)([^\r\n]*)`)
+	unquotedSingleQuotedConfigSecretPattern = regexp.MustCompile(`(?i)('(?:` + sensitiveKeyPatternText + `)')(\s*(?::=|[:=])\s*)([^\r\n]*)`)
+	doubleQuotedSecretPattern               = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*")([^"\r\n]*)(")`)
+	singleQuotedSecretPattern               = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*')([^'\r\n]*)(')`)
+	unquotedSecretPattern                   = regexp.MustCompile(`(?i)\b([a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*)(\s*(?::=|[:=])\s*)([^\r\n]*)`)
+	doubleQuotedPrivateKeyPattern           = regexp.MustCompile(`(?i)\b(private(?:\s+|[_-]?)key)(\s*(?::=|[:=])\s*")([^"\r\n]*)(")`)
+	singleQuotedPrivateKeyPattern           = regexp.MustCompile(`(?i)\b(private(?:\s+|[_-]?)key)(\s*(?::=|[:=])\s*')([^'\r\n]*)(')`)
+	unquotedPrivateKeyPattern               = regexp.MustCompile(`(?i)\b(private(?:\s+|[_-]?)key)(\s*(?::=|[:=])\s*)([^\r\n]*)`)
+	pemPrivateKeyPattern                    = regexp.MustCompile(`(?i)(-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----)(.*?)(-----END [A-Z0-9 ]*PRIVATE KEY-----)`)
+	sensitiveLinePattern                    = regexp.MustCompile(`(?i)\b(?:[a-z0-9_.-]*(?:secret|token|password|passwd|pwd|api[_-]?key|access[_-]?key)[a-z0-9_.-]*|private(?:\s+|[_-]?)key)\b`)
+
+	rmRFPattern       = regexp.MustCompile(`(?i)(?:^|[;&|(\s])rm\s+(?:-[^\s\r\n]*r[^\s\r\n]*f[^\s\r\n]*|-[^\s\r\n]*f[^\s\r\n]*r[^\s\r\n]*|-[^\s\r\n]*r[^\s\r\n]*(?:\s+\S+)*\s+-[^\s\r\n]*f[^\s\r\n]*|-[^\s\r\n]*f[^\s\r\n]*(?:\s+\S+)*\s+-[^\s\r\n]*r[^\s\r\n]*)\b`)
+	dropTablePattern  = regexp.MustCompile(`(?i)\bdrop\s+table\b`)
+	truncatePattern   = regexp.MustCompile(`(?i)\btruncate(?:\s+table)?\b`)
+	deleteFromPattern = regexp.MustCompile(`(?i)\bdelete\s+from\b`)
+	wherePattern      = regexp.MustCompile(`(?i)\bwhere\b`)
+	chmod777Pattern   = regexp.MustCompile(`(?i)\bchmod\s+777\b`)
+	forcePushPattern  = regexp.MustCompile(`(?i)\bgit\s+push\b.*(?:--force(?:-with-lease)?|-f)\b`)
 )
 
-// Scanner runs deterministic checks before any LLM-based analysis.
-type Scanner struct{}
+type ruleFunc func(AddedLine) []Finding
+type analysisRuleFunc func(diff.Analysis) []Finding
 
-// NewScanner returns a stateless scanner.
-func NewScanner() *Scanner {
-	return &Scanner{}
+// AddedLine is the normalized added line context passed to deterministic rules.
+type AddedLine struct {
+	File    string
+	Line    int
+	Content string
 }
 
-// Scan returns deterministic findings for the supplied diff analysis.
+// Scanner runs deterministic rules over parsed diff analysis.
+type Scanner struct {
+	rules         []ruleFunc
+	analysisRules []analysisRuleFunc
+}
+
+// NewScanner returns a stateless scanner with the built-in deterministic rules.
+func NewScanner() *Scanner {
+	return &Scanner{
+		rules: []ruleFunc{
+			sensitiveInformationRule,
+			dangerousOperationRule,
+		},
+		analysisRules: []analysisRuleFunc{
+			testGapRule,
+			largePRRule,
+			configDependencyRule,
+		},
+	}
+}
+
+func newScannerWithRules(rules ...ruleFunc) *Scanner {
+	return &Scanner{rules: rules}
+}
+
+// Scan returns rules findings derived from added lines in the diff analysis.
 func (s *Scanner) Scan(analysis diff.Analysis) []Finding {
+	if len(s.rules) == 0 && len(s.analysisRules) == 0 {
+		return nil
+	}
+
 	var findings []Finding
 	seen := make(map[string]struct{})
 
 	for _, file := range analysis.Files {
 		for _, hunk := range file.Hunks {
 			for _, line := range hunk.Lines {
-				if line.Type != diff.DiffLineAdded {
+				if line.Kind != diff.DiffLineAdded {
 					continue
 				}
-				if finding, ok := secretFinding(file.Filename, line); ok {
-					addFinding(&findings, seen, finding)
+
+				added := AddedLine{
+					File:    file.Filename,
+					Line:    line.NewLine,
+					Content: line.Content,
 				}
-				if finding, ok := dangerousOperationFinding(file.Filename, line); ok {
-					addFinding(&findings, seen, finding)
+				for _, rule := range s.rules {
+					for _, finding := range rule(added) {
+						findings = appendFinding(findings, seen, finding)
+					}
 				}
 			}
 		}
+	}
 
-		if finding, ok := configFinding(file); ok {
-			addFinding(&findings, seen, finding)
+	for _, rule := range s.analysisRules {
+		for _, finding := range rule(analysis) {
+			findings = appendFinding(findings, seen, finding)
 		}
 	}
 
-	if finding, ok := testGapFinding(analysis); ok {
-		addFinding(&findings, seen, finding)
-	}
-	if finding, ok := largePRFinding(analysis); ok {
-		addFinding(&findings, seen, finding)
-	}
-
-	sort.Slice(findings, func(i, j int) bool {
-		return findings[i].ID < findings[j].ID
-	})
 	return findings
 }
 
-func secretFinding(filename string, line diff.DiffLine) (Finding, bool) {
-	content := strings.TrimSpace(line.Content)
-	masked, ok := maskSecret(content)
-	if !ok {
-		return Finding{}, false
+func sensitiveInformationRule(line AddedLine) []Finding {
+	if !sensitiveLinePattern.MatchString(line.Content) {
+		return nil
 	}
-	finding := Finding{
-		RuleID:         RuleSecret,
-		Severity:       SeverityHigh,
-		Confidence:     0.82,
-		Category:       "secret",
-		Title:          "Possible secret added",
-		File:           filename,
-		Line:           line.NewLine,
-		MaskedEvidence: masked,
-		Reason:         "The added line looks like it contains a credential or private key material.",
-		Suggestion:     "Remove the secret from the patch, rotate it if it was real, and load it from a secret manager or environment variable.",
-	}
-	finding.ID = stableID(finding, content)
-	return finding, true
+
+	return []Finding{newFindingWithSeverity(
+		"security.sensitive-information",
+		"medium",
+		0.75,
+		"security",
+		"Sensitive information added",
+		line,
+		line.Content,
+		"Added code appears to include a credential or private key reference.",
+		"Move secrets to a managed secret store or environment-specific configuration and rotate any exposed value.",
+	)}
 }
 
-func dangerousOperationFinding(filename string, line diff.DiffLine) (Finding, bool) {
-	content := strings.TrimSpace(line.Content)
-	if !isDangerousOperation(content) {
-		return Finding{}, false
-	}
-	finding := Finding{
-		RuleID:         RuleDangerousOperation,
-		Severity:       SeverityHigh,
-		Confidence:     0.78,
-		Category:       "dangerous_operation",
-		Title:          "Dangerous operation added",
-		File:           filename,
-		Line:           line.NewLine,
-		MaskedEvidence: truncateEvidence(content),
-		Reason:         "The added line contains a destructive shell, SQL, permission, or force-push operation.",
-		Suggestion:     "Add explicit safeguards, narrow the target, require confirmation, or replace the operation with a reversible migration path.",
-	}
-	finding.ID = stableID(finding, content)
-	return finding, true
-}
-
-func testGapFinding(analysis diff.Analysis) (Finding, bool) {
-	if !analysis.Stats.HasSourceChanges || analysis.Stats.HasTestChanges {
-		return Finding{}, false
-	}
-	finding := Finding{
-		RuleID:     RuleTestGap,
-		Severity:   SeverityMedium,
-		Confidence: 0.72,
-		Category:   "test_coverage",
-		Title:      "Source changes without test changes",
-		Reason:     "The diff changes source files but does not include test file changes.",
-		Suggestion: "Add or update focused tests for the changed behavior, or explain why existing coverage is sufficient.",
-	}
-	finding.ID = stableID(finding, fmt.Sprintf("source:%d:test:%d", analysis.Stats.SourceFiles, analysis.Stats.TestFiles))
-	return finding, true
-}
-
-func largePRFinding(analysis diff.Analysis) (Finding, bool) {
-	totalLines := analysis.Stats.Additions + analysis.Stats.Deletions
-	if analysis.Stats.ChangedFiles <= largePRFileThreshold && totalLines <= largePRLineThreshold {
-		return Finding{}, false
+func dangerousOperationRule(line AddedLine) []Finding {
+	if !isDangerousOperation(line.Content) {
+		return nil
 	}
 
-	evidence := fmt.Sprintf("%d files, +%d/-%d lines", analysis.Stats.ChangedFiles, analysis.Stats.Additions, analysis.Stats.Deletions)
-	finding := Finding{
-		RuleID:         RuleLargePR,
-		Severity:       SeverityMedium,
-		Confidence:     0.88,
-		Category:       "change_size",
-		Title:          "Large pull request",
-		MaskedEvidence: evidence,
-		Reason:         "The diff is large enough to raise review and regression risk.",
-		Suggestion:     "Consider splitting unrelated changes, or provide a concise review guide and rollout plan.",
-	}
-	finding.ID = stableID(finding, evidence)
-	return finding, true
-}
-
-func configFinding(file diff.FileDiff) (Finding, bool) {
-	if !isConfigRiskFile(file) {
-		return Finding{}, false
-	}
-	evidence := file.Filename
-	finding := Finding{
-		RuleID:         RuleConfigChange,
-		Severity:       SeverityMedium,
-		Confidence:     0.7,
-		Category:       "configuration",
-		Title:          "Configuration or dependency file changed",
-		File:           file.Filename,
-		MaskedEvidence: evidence,
-		Reason:         "The changed file can affect build, deployment, runtime configuration, dependencies, or CI behavior.",
-		Suggestion:     "Review the operational impact, lockfile consistency, permissions, and rollback path for this change.",
-	}
-	finding.ID = stableID(finding, evidence)
-	return finding, true
-}
-
-func maskSecret(content string) (string, bool) {
-	if secretAssignmentPattern.MatchString(content) {
-		masked := secretAssignmentPattern.ReplaceAllString(content, `$1$2$3[REDACTED]`)
-		return truncateEvidence(masked), true
-	}
-	if privateKeyPattern.MatchString(content) {
-		return truncateEvidence("PRIVATE KEY [REDACTED]"), true
-	}
-	return "", false
+	return []Finding{newFindingWithSeverity(
+		"operations.dangerous-command",
+		"medium",
+		0.8,
+		"dangerous-operation",
+		"Dangerous operation added",
+		line,
+		line.Content,
+		"Added code contains an operation that can delete data, weaken permissions, or rewrite shared history.",
+		"Add explicit safeguards, scope limits, backups, dry-run behavior, or review gates before running this operation.",
+	)}
 }
 
 func isDangerousOperation(content string) bool {
-	return rmRFPattern.MatchString(content) ||
+	if rmRFPattern.MatchString(content) ||
 		dropTablePattern.MatchString(content) ||
 		truncatePattern.MatchString(content) ||
-		(deleteFromPattern.MatchString(content) && !wherePattern.MatchString(content)) ||
 		chmod777Pattern.MatchString(content) ||
-		forcePushPattern.MatchString(content)
-}
-
-func isConfigRiskFile(file diff.FileDiff) bool {
-	lower := strings.ToLower(file.Filename)
-	if strings.HasPrefix(strings.TrimPrefix(lower, "./"), ".env") ||
-		strings.HasSuffix(lower, "/.env") ||
-		strings.Contains(lower, "/.env.") ||
-		strings.HasSuffix(lower, "dockerfile") ||
-		strings.Contains(lower, "/dockerfile.") {
+		forcePushPattern.MatchString(content) {
 		return true
 	}
-	for _, kind := range file.Kinds {
-		switch kind {
-		case diff.FileKindCI, diff.FileKindDependency, diff.FileKindLockfile:
-			return true
-		case diff.FileKindConfig:
-			return true
+	return deleteFromPattern.MatchString(content) && !wherePattern.MatchString(content)
+}
+
+func testGapRule(analysis diff.Analysis) []Finding {
+	if !analysis.Stats.HasSourceChanges || analysis.Stats.HasTestChanges {
+		return nil
+	}
+
+	line := AddedLine{File: firstFileWithKind(analysis.Files, diff.FileKindSource), Content: "source changes without test changes"}
+	return []Finding{newFindingWithSeverity(
+		"quality.test-gap",
+		"medium",
+		0.7,
+		"testing",
+		"Source changes without test updates",
+		line,
+		line.Content,
+		"Source files changed, but no test files changed in this diff.",
+		"Add or update focused tests, or explain why existing coverage is sufficient.",
+	)}
+}
+
+func largePRRule(analysis diff.Analysis) []Finding {
+	totalChanges := analysis.Stats.Additions + analysis.Stats.Deletions
+	if analysis.Stats.ChangedFiles <= largePRFileCountThreshold && totalChanges <= largePRChangeThreshold {
+		return nil
+	}
+
+	evidence := fmt.Sprintf("changed files: %d, total line changes: %d", analysis.Stats.ChangedFiles, totalChanges)
+	return []Finding{newFindingWithSeverity(
+		"maintainability.large-pr",
+		"medium",
+		0.7,
+		"change-size",
+		"Large change set",
+		AddedLine{Content: evidence},
+		evidence,
+		"Large diffs are harder to review thoroughly and carry higher regression risk.",
+		"Split independent changes where practical or provide a focused review guide with testing notes.",
+	)}
+}
+
+func configDependencyRule(analysis diff.Analysis) []Finding {
+	var findings []Finding
+	for _, file := range analysis.Files {
+		if !isConfigDependencyRiskFile(file) {
+			continue
+		}
+
+		line := AddedLine{File: file.Filename, Content: file.Filename}
+		findings = append(findings, newFindingWithSeverity(
+			"maintainability.config-dependency-change",
+			"medium",
+			0.75,
+			"configuration",
+			"Configuration or dependency file changed",
+			line,
+			file.Filename,
+			"Changes to CI, container, environment, dependency, or lock files can affect builds and deployment behavior.",
+			"Verify the build, dependency resolution, and deployment path that consume this file.",
+		))
+	}
+	return findings
+}
+
+func isConfigDependencyRiskFile(file diff.FileDiff) bool {
+	filename := normalizePath(file.Filename)
+	base := pathBase(filename)
+
+	if base == "dockerfile" || strings.HasPrefix(base, "dockerfile.") {
+		return true
+	}
+	if strings.HasPrefix(base, ".env") || strings.Contains(base, ".env.") {
+		return true
+	}
+	return hasAnyKind(file.Kinds, diff.FileKindCI, diff.FileKindDependency, diff.FileKindLockfile)
+}
+
+func appendFinding(findings []Finding, seen map[string]struct{}, finding Finding) []Finding {
+	key := dedupeKey(finding)
+	if _, ok := seen[key]; ok {
+		return findings
+	}
+	seen[key] = struct{}{}
+	return append(findings, finding)
+}
+
+func firstFileWithKind(files []diff.FileDiff, kind diff.FileKind) string {
+	for _, file := range files {
+		if hasAnyKind(file.Kinds, kind) {
+			return file.Filename
+		}
+	}
+	return ""
+}
+
+func hasAnyKind(kinds []diff.FileKind, wanted ...diff.FileKind) bool {
+	for _, kind := range kinds {
+		for _, want := range wanted {
+			if kind == want {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-func addFinding(findings *[]Finding, seen map[string]struct{}, finding Finding) {
-	key := fmt.Sprintf("%s:%s:%d:%s", finding.File, finding.Category, finding.Line, finding.RuleID)
-	if _, ok := seen[key]; ok {
-		return
-	}
-	seen[key] = struct{}{}
-	*findings = append(*findings, finding)
+func normalizePath(filename string) string {
+	return strings.ToLower(strings.ReplaceAll(filename, "\\", "/"))
 }
 
-func stableID(finding Finding, evidence string) string {
-	normalized := strings.Join(strings.Fields(strings.ToLower(evidence)), " ")
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d|%s", finding.RuleID, finding.File, finding.Line, normalized)))
-	return finding.RuleID + "-" + hex.EncodeToString(sum[:])[:12]
+func pathBase(filename string) string {
+	idx := strings.LastIndex(filename, "/")
+	if idx == -1 {
+		return filename
+	}
+	return filename[idx+1:]
+}
+
+func newFinding(ruleID, category, title string, line AddedLine, evidence, reason, suggestion string) Finding {
+	return newFindingWithSeverity(ruleID, defaultSeverity, defaultConfidence, category, title, line, evidence, reason, suggestion)
+}
+
+func newFindingWithSeverity(ruleID, severity string, confidence float64, category, title string, line AddedLine, evidence, reason, suggestion string) Finding {
+	return Finding{
+		ID:             findingID(ruleID, line.File, line.Line, evidence),
+		RuleID:         ruleID,
+		Severity:       severity,
+		Confidence:     confidence,
+		Category:       category,
+		Title:          title,
+		File:           line.File,
+		Line:           line.Line,
+		MaskedEvidence: truncateEvidence(maskSensitiveEvidence(evidence)),
+		Reason:         reason,
+		Suggestion:     suggestion,
+	}
+}
+
+func findingID(ruleID, file string, line int, evidence string) string {
+	normalized := normalizeEvidence(evidence)
+	sum := sha256.Sum256([]byte(normalized))
+	return fmt.Sprintf("%s:%s:%d:%s", ruleID, file, line, hex.EncodeToString(sum[:])[:12])
+}
+
+func dedupeKey(finding Finding) string {
+	return fmt.Sprintf(
+		"%s:%d:%s:%s:%s:%s",
+		finding.File,
+		finding.Line,
+		finding.Category,
+		finding.RuleID,
+		normalizeEvidence(finding.Title),
+		finding.ID,
+	)
+}
+
+func normalizeEvidence(evidence string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(evidence)), " ")
 }
 
 func truncateEvidence(evidence string) string {
 	if len(evidence) <= maxEvidenceLength {
 		return evidence
 	}
-	return evidence[:maxEvidenceLength] + "..."
+	if maxEvidenceLength <= 3 {
+		return evidence[:maxEvidenceLength]
+	}
+	return evidence[:maxEvidenceLength-3] + "..."
+}
+
+func maskSensitiveEvidence(evidence string) string {
+	masked := doubleQuotedConfigSecretPattern.ReplaceAllString(evidence, "$1$2<masked>$4")
+	masked = singleQuotedConfigSecretPattern.ReplaceAllString(masked, "$1$2<masked>$4")
+	masked = unquotedDoubleQuotedConfigSecretPattern.ReplaceAllString(masked, "$1$2<masked>")
+	masked = unquotedSingleQuotedConfigSecretPattern.ReplaceAllString(masked, "$1$2<masked>")
+	masked = doubleQuotedPrivateKeyPattern.ReplaceAllString(masked, "$1$2<masked>$4")
+	masked = singleQuotedPrivateKeyPattern.ReplaceAllString(masked, "$1$2<masked>$4")
+	masked = unquotedPrivateKeyPattern.ReplaceAllString(masked, "$1$2<masked>")
+	masked = doubleQuotedSecretPattern.ReplaceAllString(masked, "$1$2<masked>$4")
+	masked = singleQuotedSecretPattern.ReplaceAllString(masked, "$1$2<masked>$4")
+	masked = unquotedSecretPattern.ReplaceAllString(masked, "$1$2<masked>")
+	return pemPrivateKeyPattern.ReplaceAllString(masked, "$1 <masked> $3")
 }

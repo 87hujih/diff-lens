@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test:unit": "esbuild tests/unit.test.ts --bundle --format=esm --platform=node --target=node20 --outfile=node_modules/.cache/diff-lens-unit-tests/unit.test.js --sourcemap=inline --external:node:test --external:node:assert/strict && node node_modules/.cache/diff-lens-unit-tests/unit.test.js",
     "build": "tsc -b && npm run build:assets && node scripts/write-build-html.mjs",
-    "build:assets": "esbuild src/main.tsx --bundle --format=esm --target=es2022 --jsx=automatic --loader:.css=css --outdir=dist/assets --entry-names=index --asset-names=[name] --public-path=/assets",
+    "build:assets": "esbuild src/main.tsx --bundle --format=esm --target=es2022 --jsx=automatic --loader:.css=css --outdir=dist/assets --entry-names=index --asset-names=[name] --public-path=/assets --define:process.env.NODE_ENV=\\\"production\\\" --minify --legal-comments=none",
     "preview": "vite preview",
     "preview:static": "python -B ../scripts/dev-static-proxy.py"
   },

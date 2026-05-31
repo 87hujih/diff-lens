@@ -13,6 +13,7 @@ import (
 	"diff-lens/internal/github"
 )
 
+// TestParsePRURLAcceptsGitHubPullRequestURL 验证对应场景的行为是否符合预期。
 func TestParsePRURLAcceptsGitHubPullRequestURL(t *testing.T) {
 	ref, err := github.ParsePRURL("https://github.com/openai/example/pull/123?tab=files#discussion")
 	if err != nil {
@@ -30,6 +31,7 @@ func TestParsePRURLAcceptsGitHubPullRequestURL(t *testing.T) {
 	}
 }
 
+// TestParsePRURLRejectsNonPullRequestURL 验证对应场景的行为是否符合预期。
 func TestParsePRURLRejectsNonPullRequestURL(t *testing.T) {
 	_, err := github.ParsePRURL("https://github.com/openai/example/issues/123")
 	if err == nil {
@@ -37,6 +39,7 @@ func TestParsePRURLRejectsNonPullRequestURL(t *testing.T) {
 	}
 }
 
+// TestPullRequestDataRepresentsMetadataFilesAndCommits 验证对应场景的行为是否符合预期。
 func TestPullRequestDataRepresentsMetadataFilesAndCommits(t *testing.T) {
 	timestamp := time.Date(2026, 5, 30, 10, 15, 0, 0, time.UTC)
 
@@ -80,6 +83,7 @@ func TestPullRequestDataRepresentsMetadataFilesAndCommits(t *testing.T) {
 	}
 }
 
+// TestPullRequestFileAllowsEmptyPatch 验证对应场景的行为是否符合预期。
 func TestPullRequestFileAllowsEmptyPatch(t *testing.T) {
 	file := github.PullRequestFile{
 		Filename:  "assets/logo.png",
@@ -95,6 +99,7 @@ func TestPullRequestFileAllowsEmptyPatch(t *testing.T) {
 	}
 }
 
+// TestGitHubErrorsSupportErrorsIs 验证对应场景的行为是否符合预期。
 func TestGitHubErrorsSupportErrorsIs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -119,6 +124,30 @@ func TestGitHubErrorsSupportErrorsIs(t *testing.T) {
 	}
 }
 
+// TestNewClientWithOptionsUsesTimeoutClientByDefault 验证对应场景的行为是否符合预期。
+func TestNewClientWithOptionsUsesTimeoutClientByDefault(t *testing.T) {
+	client := github.NewClientWithOptions(github.ClientOptions{})
+
+	timeout := time.Duration(reflect.ValueOf(client).Elem().FieldByName("httpClient").Elem().FieldByName("Timeout").Int())
+	if timeout == 0 {
+		t.Fatalf("default HTTP client timeout = %v, want non-zero timeout", timeout)
+	}
+}
+
+// TestNewClientWithOptionsPreservesInjectedHTTPClient 验证对应场景的行为是否符合预期。
+func TestNewClientWithOptionsPreservesInjectedHTTPClient(t *testing.T) {
+	injected := &http.Client{Timeout: 2 * time.Second}
+
+	client := github.NewClientWithOptions(github.ClientOptions{HTTPClient: injected})
+
+	got := reflect.ValueOf(client).Elem().FieldByName("httpClient").Pointer()
+	want := reflect.ValueOf(injected).Pointer()
+	if got != want {
+		t.Fatalf("HTTP client pointer = %x, want injected pointer %x", got, want)
+	}
+}
+
+// TestFetchPullRequestRequestsEndpointsAndReturnsData 验证对应场景的行为是否符合预期。
 func TestFetchPullRequestRequestsEndpointsAndReturnsData(t *testing.T) {
 	var paths []string
 
@@ -227,6 +256,7 @@ func TestFetchPullRequestRequestsEndpointsAndReturnsData(t *testing.T) {
 	}
 }
 
+// TestFetchPullRequestSendsAuthorizationHeaderWhenTokenConfigured 验证对应场景的行为是否符合预期。
 func TestFetchPullRequestSendsAuthorizationHeaderWhenTokenConfigured(t *testing.T) {
 	const token = "test-token"
 	var sawBearerToken bool
@@ -264,6 +294,7 @@ func TestFetchPullRequestSendsAuthorizationHeaderWhenTokenConfigured(t *testing.
 	}
 }
 
+// TestFetchPullRequestMergesPaginatedFiles 验证对应场景的行为是否符合预期。
 func TestFetchPullRequestMergesPaginatedFiles(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -302,6 +333,7 @@ func TestFetchPullRequestMergesPaginatedFiles(t *testing.T) {
 	}
 }
 
+// TestFetchPullRequestMergesPaginatedCommits 验证对应场景的行为是否符合预期。
 func TestFetchPullRequestMergesPaginatedCommits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -340,6 +372,7 @@ func TestFetchPullRequestMergesPaginatedCommits(t *testing.T) {
 	}
 }
 
+// TestFetchPullRequestKeepsFileWhenPatchMissing 验证对应场景的行为是否符合预期。
 func TestFetchPullRequestKeepsFileWhenPatchMissing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -369,6 +402,7 @@ func TestFetchPullRequestKeepsFileWhenPatchMissing(t *testing.T) {
 	}
 }
 
+// TestFetchPullRequestMapsHTTPStatusErrors 验证对应场景的行为是否符合预期。
 func TestFetchPullRequestMapsHTTPStatusErrors(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -406,6 +440,7 @@ func TestFetchPullRequestMapsHTTPStatusErrors(t *testing.T) {
 	}
 }
 
+// TestFetchPullRequestMapsMalformedJSONToResponseInvalid 验证对应场景的行为是否符合预期。
 func TestFetchPullRequestMapsMalformedJSONToResponseInvalid(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, `{`)
@@ -423,6 +458,7 @@ func TestFetchPullRequestMapsMalformedJSONToResponseInvalid(t *testing.T) {
 	}
 }
 
+// TestFetchPullRequestMapsHTTPClientFailureToRequestFailed 验证对应场景的行为是否符合预期。
 func TestFetchPullRequestMapsHTTPClientFailureToRequestFailed(t *testing.T) {
 	client := github.NewClientWithOptions(github.ClientOptions{
 		BaseURL: "http://example.invalid",
@@ -437,12 +473,15 @@ func TestFetchPullRequestMapsHTTPClientFailureToRequestFailed(t *testing.T) {
 	}
 }
 
+// failingRoundTripper 是测试辅助数据结构或替身类型。
 type failingRoundTripper struct{}
 
+// RoundTrip 是测试辅助函数。
 func (failingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, errors.New("request failed")
 }
 
+// writeMinimalPR 写入测试 HTTP 响应。
 func writeMinimalPR(w http.ResponseWriter) {
 	writeJSON(w, `{
 		"number": 123,
@@ -457,11 +496,13 @@ func writeMinimalPR(w http.ResponseWriter) {
 	}`)
 }
 
+// writeJSON 写入测试 HTTP 响应。
 func writeJSON(w http.ResponseWriter, body string) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(body))
 }
 
+// serverURL 是测试辅助函数。
 func serverURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
