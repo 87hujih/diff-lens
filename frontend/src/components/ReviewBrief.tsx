@@ -1,18 +1,19 @@
 import type { Report } from "../types/review";
 import { normalizeRiskLevel } from "../utils/reviewStatus";
 
+// ReviewBriefProps 包含最终归一化报告。
 interface ReviewBriefProps {
   report: Report;
-  degraded: boolean;
 }
 
+// formatCount 用统一数字格式展示文件数和行数。
 function formatCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-export function ReviewBrief({ report, degraded }: ReviewBriefProps) {
+// ReviewBrief 渲染 PR 摘要、统计、降级提示和评审重点。
+export function ReviewBrief({ report }: ReviewBriefProps) {
   const riskLevel = normalizeRiskLevel(report.summary.risk_level);
-  const isDegraded = degraded || Boolean(report.degraded);
   const hasTruncation =
     Boolean(report.meta.context_truncated) ||
     report.meta.omitted_files_count > 0 ||
@@ -56,13 +57,6 @@ export function ReviewBrief({ report, degraded }: ReviewBriefProps) {
           <dd>{formatCount(report.pr.commits)}</dd>
         </div>
       </dl>
-
-      {isDegraded ? (
-        <div className="review-alert review-alert--warning" role="note">
-          <strong>Degraded report</strong>
-          <p>{report.meta.degraded_reason || "Some analysis stages did not complete fully."}</p>
-        </div>
-      ) : null}
 
       {hasTruncation ? (
         <div className="review-alert" role="note">

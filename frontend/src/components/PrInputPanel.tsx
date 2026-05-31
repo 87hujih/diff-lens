@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 
+// PrInputPanelProps 定义 PR 输入表单的受控字段和提交回调。
 interface PrInputPanelProps {
   prURL: string;
   token: string;
@@ -10,6 +11,7 @@ interface PrInputPanelProps {
   onRunDemo: () => void;
 }
 
+// PrInputPanel 收集 PR URL、可选 token，并提供演示流入口。
 export function PrInputPanel({
   prURL,
   token,
@@ -24,17 +26,21 @@ export function PrInputPanel({
       <div className="input-panel__heading">
         <p className="eyebrow">diff-lens</p>
         <h1 id="review-console-title">PR review console</h1>
+        <p className="input-panel__subtitle">Local review analysis for GitHub pull requests.</p>
       </div>
 
-      <form onSubmit={onAnalyze} className="review-form">
+      <form onSubmit={onAnalyze} className="review-form" aria-busy={isRunning}>
         <div className="field-group">
           <label htmlFor="pr-url">Pull request URL</label>
           <input
             id="pr-url"
+            type="url"
             value={prURL}
             onChange={(event) => onPrURLChange(event.target.value)}
             placeholder="https://github.com/owner/repo/pull/123"
             autoComplete="url"
+            inputMode="url"
+            spellCheck={false}
             disabled={isRunning}
             required
           />
@@ -63,6 +69,11 @@ export function PrInputPanel({
             Demo PR
           </button>
         </div>
+        {isRunning ? (
+          <p className="form-status" role="status" aria-live="polite">
+            Streaming analysis from the backend.
+          </p>
+        ) : null}
       </form>
     </section>
   );

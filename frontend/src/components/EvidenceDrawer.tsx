@@ -1,17 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Risk } from "../types/review";
+import { copyToClipboard } from "../utils/clipboard";
 import { normalizeSeverity } from "../utils/reviewStatus";
 
+type CopyFeedback = "idle" | "copied" | "failed";
+
+// EvidenceDrawerProps 传入当前风险和关闭详情抽屉的回调。
 interface EvidenceDrawerProps {
   risk: Risk | null;
   onClose: () => void;
 }
 
-function copyText(value: string) {
-  void navigator.clipboard?.writeText(value).catch(() => undefined);
-}
-
+// formatLocation 将风险定位格式化成人类可读路径。
 function formatLocation(risk: Risk): string {
   if (!risk.file) {
     return "No specific line";
@@ -20,7 +21,22 @@ function formatLocation(risk: Risk): string {
   return risk.line ? `${risk.file}:${risk.line}` : `${risk.file} · No specific line`;
 }
 
+// EvidenceDrawer 展示单条风险的证据、引用和修复建议。
 export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
+  const [feedback, setFeedback] = useState<Record<string, CopyFeedback>>({});
+  const timersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    setFeedback({});
+  }, [risk?.id]);
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
+
+  // 抽屉打开时监听 Escape，关闭时移除监听。
   useEffect(() => {
     if (!risk) {
       return undefined;
@@ -35,6 +51,16 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose, risk]);
+
+  async function copyText(key: string, value: string) {
+    const result = await copyToClipboard(value);
+    setFeedback((current) => ({ ...current, [key]: result.ok ? "copied" : "failed" }));
+
+    const timer = window.setTimeout(() => {
+      setFeedback((current) => ({ ...current, [key]: "idle" }));
+    }, 1800);
+    timersRef.current.push(timer);
+  }
 
   if (!risk) {
     return (
@@ -89,8 +115,14 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
         <div className="evidence-block__heading">
           <h4>Evidence</h4>
           {hasEvidence ? (
-            <button type="button" className="secondary compact-button" onClick={() => copyText(risk.evidence ?? "")}>
-              Copy
+            <button
+              type="button"
+              className="secondary compact-button"
+              onClick={() => {
+                void copyText("evidence", risk.evidence ?? "");
+              }}
+            >
+              {feedback.evidence === "copied" ? "Copied" : feedback.evidence === "failed" ? "Copy failed" : "Copy"}
             </button>
           ) : null}
         </div>
@@ -122,8 +154,18 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
         <div className="evidence-block__heading">
           <h4>Suggestion</h4>
           {risk.suggestion ? (
-            <button type="button" className="secondary compact-button" onClick={() => copyText(risk.suggestion)}>
-              Copy
+            <button
+              type="button"
+              className="secondary compact-button"
+              onClick={() => {
+                void copyText("suggestion", risk.suggestion);
+              }}
+            >
+              {feedback.suggestion === "copied"
+                ? "Copied"
+                : feedback.suggestion === "failed"
+                  ? "Copy failed"
+                  : "Copy"}
             </button>
           ) : null}
         </div>

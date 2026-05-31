@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { analyzeReviewStream } from "./api/reviewStream";
 import { AITracePanel } from "./components/AITracePanel";
@@ -14,6 +14,7 @@ import type { ReviewEvent } from "./types/review";
 import { getVisibleRisks, type RiskSeverityFilter } from "./utils/riskFilters";
 import "./styles.css";
 
+// App 连接输入表单、流式分析状态和报告展示区域。
 export default function App() {
   const [state, dispatch] = useReducer(reviewReducer, initialReviewState);
   const [prURL, setPrURL] = useState("");
@@ -24,6 +25,7 @@ export default function App() {
   const abortRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
+  // runAnalysis 取消旧请求并启动新的 SSE 分析会话。
   async function runAnalysis(request: { pr_url: string; github_token?: string; demo: boolean }) {
     abortRef.current?.abort();
     dispatch({ type: "reset" });
@@ -35,6 +37,7 @@ export default function App() {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // 只处理当前请求的事件，避免慢响应覆盖新会话状态。
     const dispatchIfCurrent = (event: ReviewEvent) => {
       if (requestIdRef.current === requestId) {
         dispatch({ type: "stream_event", event });
@@ -67,14 +70,29 @@ export default function App() {
     }
   }
 
+  // submit 将表单输入转换成真实 PR 分析请求。
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runAnalysis({ pr_url: prURL, github_token: token || undefined, demo: false });
   }
 
+  // runDemo 启动后端提供的确定性演示流。
   async function runDemo() {
     await runAnalysis({ pr_url: "", demo: true });
   }
+
+  const closeEvidence = useCallback(() => {
+    const riskId = activeRiskId;
+    setActiveRiskId(null);
+
+    if (!riskId) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`[data-risk-id="${CSS.escape(riskId)}"]`)?.focus();
+    });
+  }, [activeRiskId]);
 
   const report = state.result;
   // 规则风险到达后立即展示；最终报告生成后优先展示合并后的风险。
@@ -85,6 +103,7 @@ export default function App() {
     [activeRiskId, visibleRisks]
   );
 
+  // 当前过滤条件隐藏已选风险时，清空详情抽屉的选中态。
   useEffect(() => {
     if (activeRiskId && !visibleRisks.some((risk) => risk.id === activeRiskId)) {
       setActiveRiskId(null);
@@ -110,13 +129,24 @@ export default function App() {
           <StatusBanner error={state.error} degraded={state.degraded} result={report} />
 
           {report ? (
-            <>
-              <ReviewBrief report={report} degraded={false} />
-            </>
+            <ReviewBrief report={report} />
           ) : (
-            <div className="empty-report">
-              <h2>Waiting for review output</h2>
-              <p>Start with a PR URL or use the demo stream.</p>
+            <div className={isRunning ? "empty-report empty-report--running" : "empty-report"}>
+              <div>
+                <h2>{isRunning ? "Analysis in progress" : "No report yet"}</h2>
+                <p>
+                  {isRunning
+                    ? "Findings can appear before the final normalized report."
+                    : "Enter a PR URL or run the demo stream."}
+                </p>
+                {isRunning ? (
+                  <div className="empty-report__skeleton" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : null}
+              </div>
             </div>
           )}
 
@@ -128,12 +158,12 @@ export default function App() {
               onFilterChange={setRiskFilter}
               onSelectRisk={(risk) => setActiveRiskId(risk.id)}
             />
-            <EvidenceDrawer risk={activeRisk} onClose={() => setActiveRiskId(null)} />
+            <EvidenceDrawer risk={activeRisk} onClose={closeEvidence} />
           </div>
 
-          <AITracePanel aiText={state.aiText} steps={state.steps} />
-
           {report ? <SuggestedComments report={report} /> : null}
+
+          <AITracePanel aiText={state.aiText} steps={state.steps} />
         </section>
       </section>
     </main>
