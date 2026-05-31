@@ -4,7 +4,7 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标�
 
 项目目标不是替代 reviewer，而是帮助 reviewer 更快进入上下文，减少重复检查成本，并把高风险变更提前暴露出来。
 
-> 当前真实模式已接入 GitHub PR 获取、diff 解析、确定性规则扫描、受控上下文构建和 OpenAI 兼容 LLM 分析。未配置 `LLM_API_KEY` 或模型调用失败时，真实模式会返回包含规则风险的 degraded report；demo 模式仍用于展示稳定完整流程。
+> 当前真实模式已完成 GitHub PR 第一阶段获取：PR metadata、变更文件和 commit 列表。diff 解析、规则扫描和 LLM 分析仍在后续阶段；真实模式目前会返回 degraded report，demo 模式用于展示完整产品流程。
 
 ## 功能目标
 
@@ -25,12 +25,10 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标�
 | 项目设计文档 | 已完成 |
 | Go/Gin 后端 | 已完成基础框架 |
 | GitHub PR URL 解析 | 已完成基础校验 |
-| GitHub PR 获取 | 已完成真实获取：metadata、files、patch、commits |
-| diff 解析 | 已完成第一阶段：文件分类、hunk 解析、统计、缺失 patch 降级 |
-| 规则风险扫描 | 已完成第一批通用规则：secret、危险操作、测试缺口、大 PR、配置/依赖/CI |
-| ContextBuilder | 已完成第一阶段：裁剪、脱敏、证据 ID、预算控制 |
-| OpenAI 兼容 LLM 分析 | 已完成第一阶段：非流式 Chat Completions、JSON 解析、失败降级 |
-| ReportNormalizer | 已完成第一阶段：规则/AI 风险合并、证据校验、degraded meta |
+| GitHub PR 获取 | 已完成第一阶段真实获取：metadata、files、commits |
+| diff 解析 | 已预留接口与数据结构 |
+| 规则风险扫描 | 已预留 scanner 框架，真实模式尚未运行 |
+| OpenAI 兼容 LLM 分析 | 已预留 analyzer 配置入口，真实模式尚未调用 |
 | React/Vite 前端分析台 | 已完成基础页面与 SSE 状态流 |
 | 示例 PR 模式与复制 Review 建议 | 已完成 demo 流程 |
 
@@ -45,7 +43,7 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标�
 
 ## 设计概览
 
-真实模式链路如下。LLM 只消费裁剪和脱敏后的 `ReviewContext`，不会直接消费完整 raw diff。
+完整目标链路如下。当前真实模式只完成到 GitHub Client 获取 PR metadata、变更文件和 commit 列表；diff/rules/LLM 仍未接入真实分析。
 
 ```text
 GitHub PR URL
@@ -98,18 +96,6 @@ GITHUB_TOKEN=ghp_xxx go run ./cmd/server
 
 Token 只用于当前 GitHub API 请求，不会写入本地文件或数据库。不要把真实 token 提交到仓库或写进 README。
 
-LLM 配置使用 OpenAI 兼容 Chat Completions API：
-
-```bash
-LLM_BASE_URL=https://api.deepseek.com
-LLM_API_KEY=replace-me
-LLM_MODEL=deepseek-chat
-```
-
-`LLM_BASE_URL` 和 `LLM_MODEL` 有本地默认值；只有配置 `LLM_API_KEY` 后才会得到 AI summary、AI risks 和 suggested comments。支持 DeepSeek、Qwen、OpenAI 兼容网关等实现 `POST /v1/chat/completions` 的服务。
-
-模型输出不会被直接展示。后端先解析为结构化 JSON，再由 `ReportNormalizer` 校验证据引用并合并规则风险。AI 风险必须引用已有 context snippet 或 rule finding 的 `evidence_refs`；证据无法验证时不会作为 high/medium risk 展示。
-
 可运行的验证命令：
 
 ```bash
@@ -142,23 +128,11 @@ curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
   --data "{\"pr_url\":\"https://github.com/{owner}/{repo}/pull/{number}\",\"github_token\":\"ghp_xxx\",\"demo\":false}"
 ```
 
-未配置 `LLM_API_KEY` 时，真实模式仍应输出：
-
-- `event: rules`
-- `event: result`
-- `"degraded":true`
-- `"meta":{"ai_completed":false,...,"degraded_reason":"llm_not_configured"}`
-- 规则扫描保留下来的风险
-
-配置可用模型后，`result` 会包含 AI summary、suggested comments，以及 `rule` / `ai` / `merged` 来源的 risks。模型结果是辅助 review 的候选信号，不保证发现所有问题。
-
 ## 当前限制
 
-- 规则扫描是语言无关的启发式检查，第一阶段不覆盖完整 AST 语义、跨文件调用图、复杂 SQL/命令拼接或所有错误处理缺陷。
-- GitHub 可能省略大型文件或二进制文件 patch；这类文件会保留文件名和状态，但不会伪造 diff 证据。
-- ContextBuilder 会裁剪大型 PR。`result.meta.context_truncated`、`omitted_files_count` 和 `omitted_snippets_count` 会说明上下文是否被裁剪。
-- LLM 未配置、请求失败、响应非法或模型输出 JSON 不合法时，真实模式返回 degraded report，并通过 `result.meta.degraded_reason` 说明原因。
-- AI 风险必须有可验证证据引用；证据不足的问题会被降级或丢弃。
+- 真实模式当前只完成 PR 数据获取，会调用 GitHub API 获取 PR metadata、变更文件和 commit 列表。
+- diff 解析、规则扫描、上下文构建和 AI 分析仍在后续模块完成，当前不会基于真实 diff 生成完整 Review 结论。
+- 因此真实模式当前返回 degraded report 是预期行为；它证明真实 PR 获取链路可用，但不代表完整 AI Review 已完成。
 - demo 模式仍会输出完整演示报告，适合比赛演示和本地体验。
 
 PR 质量检查脚本会校验：
@@ -187,11 +161,8 @@ diff-lens/
 ├── internal/
 │   ├── config/
 │   ├── demo/
-│   ├── diff/
 │   ├── github/
 │   ├── handler/
-│   ├── llm/
-│   ├── rules/
 │   └── review/
 ├── scripts/
 │   ├── check-pr-quality.mjs

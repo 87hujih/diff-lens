@@ -56,19 +56,17 @@ type PRInfo struct {
 
 // Risk 表示来自规则、AI 或合并证据的一条 review 风险。
 type Risk struct {
-	ID           string   `json:"id"`
-	Source       string   `json:"source"`
-	Severity     string   `json:"severity"`
-	Confidence   float64  `json:"confidence"`
-	Category     string   `json:"category"`
-	Title        string   `json:"title"`
-	File         string   `json:"file,omitempty"`
-	Line         int      `json:"line,omitempty"`
-	RuleID       string   `json:"rule_id,omitempty"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
-	Evidence     string   `json:"evidence,omitempty"`
-	Reason       string   `json:"reason"`
-	Suggestion   string   `json:"suggestion"`
+	ID         string  `json:"id"`
+	Source     string  `json:"source"`
+	Severity   string  `json:"severity"`
+	Confidence float64 `json:"confidence"`
+	Category   string  `json:"category"`
+	Title      string  `json:"title"`
+	File       string  `json:"file,omitempty"`
+	Line       int     `json:"line,omitempty"`
+	Evidence   string  `json:"evidence,omitempty"`
+	Reason     string  `json:"reason"`
+	Suggestion string  `json:"suggestion"`
 }
 
 // RulesPayload 将规则扫描风险打包成一个流式事件。
@@ -86,21 +84,10 @@ type Summary struct {
 
 // SuggestedComment 是可直接复制到 GitHub 的 review 评论草稿。
 type SuggestedComment struct {
-	ID           string   `json:"id"`
-	File         string   `json:"file,omitempty"`
-	Line         int      `json:"line,omitempty"`
-	Body         string   `json:"body"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
-}
-
-// ReportMeta records which analysis stages contributed to the final report.
-type ReportMeta struct {
-	AICompleted          bool   `json:"ai_completed"`
-	RulesCompleted       bool   `json:"rules_completed"`
-	ContextTruncated     bool   `json:"context_truncated"`
-	DegradedReason       string `json:"degraded_reason,omitempty"`
-	OmittedFilesCount    int    `json:"omitted_files_count"`
-	OmittedSnippetsCount int    `json:"omitted_snippets_count"`
+	ID   string `json:"id"`
+	File string `json:"file,omitempty"`
+	Line int    `json:"line,omitempty"`
+	Body string `json:"body"`
 }
 
 // Report 是前端展示的最终 review 产物。
@@ -109,7 +96,6 @@ type Report struct {
 	Summary  Summary            `json:"summary"`
 	Risks    []Risk             `json:"risks"`
 	Comments []SuggestedComment `json:"comments"`
-	Meta     ReportMeta         `json:"meta"`
 	Degraded bool               `json:"degraded,omitempty"`
 }
 
