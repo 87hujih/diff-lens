@@ -41,10 +41,9 @@ docs: add demo video link
 请写明如何验证本 PR 正常工作。
 
 ```bash
-# 示例，按项目实际情况修改
-npm run test
-npm run lint
-npm run dev
+go test ./...
+node scripts/check-pr-quality.test.mjs
+npm --prefix frontend run build
 ```
 
 手动验证步骤：

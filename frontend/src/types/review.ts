@@ -82,6 +82,14 @@ export interface SuggestedComment {
   evidence_refs?: string[];
 }
 
+export interface EvidenceItem {
+  id: string;
+  file?: string;
+  line?: number;
+  snippet: string;
+  source?: string;
+}
+
 // ReportMeta records which backend analysis stages contributed to a result.
 export interface ReportMeta {
   ai_completed: boolean;
@@ -97,6 +105,7 @@ export interface Report {
   pr: PRInfo;
   summary: Summary;
   risks: Risk[];
+  evidence: EvidenceItem[];
   comments: SuggestedComment[];
   meta: ReportMeta;
   degraded?: boolean;

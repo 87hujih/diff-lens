@@ -1,6 +1,9 @@
 package review
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ReportNormalizerOptions controls report stage completion metadata.
 type ReportNormalizerOptions struct {
@@ -56,6 +59,7 @@ func (n *ReportNormalizer) Normalize(pr PRInfo, ruleRisks []Risk, ai ReviewAnaly
 			ReviewFocus: reviewFocusFromRisks(risks, ai.AttentionItems),
 		},
 		Risks:    risks,
+		Evidence: evidenceItemsFrom(risks, ctx),
 		Comments: comments,
 		Meta:     metaFromContext(ctx, options),
 		Degraded: options.DegradedReason != "" || !options.AICompleted,
@@ -76,6 +80,7 @@ func (n *ReportNormalizer) Degraded(pr PRInfo, ruleRisks []Risk, ctx ReviewConte
 			ReviewFocus: reviewFocusFromRisks(risks, nil),
 		},
 		Risks:    risks,
+		Evidence: evidenceItemsFrom(risks, ctx),
 		Comments: []SuggestedComment{},
 		Meta: metaFromContext(ctx, ReportNormalizerOptions{
 			AICompleted:    false,
@@ -84,6 +89,53 @@ func (n *ReportNormalizer) Degraded(pr PRInfo, ruleRisks []Risk, ctx ReviewConte
 		}),
 		Degraded: true,
 	}
+}
+
+func evidenceItemsFrom(risks []Risk, ctx ReviewContext) []EvidenceItem {
+	items := []EvidenceItem{}
+	seen := map[string]bool{}
+
+	add := func(item EvidenceItem) {
+		item.ID = strings.TrimSpace(item.ID)
+		item.Snippet = strings.TrimSpace(item.Snippet)
+		if item.ID == "" || item.Snippet == "" || seen[item.ID] {
+			return
+		}
+		seen[item.ID] = true
+		items = append(items, item)
+	}
+
+	for _, risk := range risks {
+		id := risk.ID
+		if id == "" && risk.RuleID != "" {
+			id = risk.RuleID
+		}
+		add(EvidenceItem{
+			ID:      id,
+			File:    risk.File,
+			Line:    risk.Line,
+			Snippet: risk.Evidence,
+			Source:  risk.Source,
+		})
+	}
+
+	for _, file := range ctx.Files {
+		for _, snippet := range file.Snippets {
+			line := snippet.StartLine
+			if line == 0 {
+				line = snippet.EndLine
+			}
+			add(EvidenceItem{
+				ID:      snippet.ID,
+				File:    snippet.File,
+				Line:    line,
+				Snippet: snippet.Patch,
+				Source:  "context",
+			})
+		}
+	}
+
+	return items
 }
 
 func normalizeRuleRisks(ruleRisks []Risk) []Risk {
