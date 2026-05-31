@@ -16,6 +16,19 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标�
 - 提供可复制到 GitHub 的 Review 建议。
 - 提供示例 PR 模式，保证本地演示稳定。
 
+## 前端分析台
+
+React/Vite 前端是面向 reviewer 的数据密集型分析台，而不是营销页。主要区域包括：
+
+- `Review Brief`：展示 PR 标题、作者、基础统计、风险等级、关键变更、review focus 和降级原因。
+- `Risk Radar`：按 `all`、`high`、`medium`、`low` 过滤风险，点击风险后联动右侧证据区。
+- `Evidence Drawer`：展示当前风险的严重级别、来源、置信度、证据片段、证据引用 ID 和建议修复方式，并提供复制按钮。
+- `Suggested Comments`：把后端归一化后的 review 建议整理为可复制到 GitHub 的评论。
+- `AI Trace`：只展示 SSE `ai_delta` 中的模型分析过程文本，用于解释分析进度；该事件可能缺席，且不作为最终报告来源。
+- `StatusBanner`：在请求错误、LLM 未配置、LLM 调用失败或其他 degraded 状态下提示当前结果来源，规则扫描结果仍会保留。
+
+最终可审阅报告来自 SSE `result` 事件。`ai_delta` 只用于展示分析过程，可能因为未配置 `LLM_API_KEY`、模型失败或后端降级而不存在。
+
 ## 当前进度
 
 | 模块 | 状态 |
@@ -31,7 +44,7 @@ diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标�
 | ContextBuilder | 已完成第一阶段：裁剪、脱敏、证据 ID、预算控制 |
 | OpenAI 兼容 LLM 分析 | 已完成第一阶段：非流式 Chat Completions、JSON 解析、失败降级 |
 | ReportNormalizer | 已完成第一阶段：规则/AI 风险合并、证据校验、degraded meta |
-| React/Vite 前端分析台 | 已完成基础页面与 SSE 状态流 |
+| React/Vite 前端分析台 | 已完成 Review Brief、Risk Radar、Evidence Drawer、AI Trace、StatusBanner 与 Suggested Comments |
 | 示例 PR 模式与复制 Review 建议 | 已完成 demo 流程 |
 
 ## 技术栈
@@ -86,6 +99,15 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
+如果当前 Windows 环境限制 Node 派生原生进程，Vite 可能在加载 esbuild 时失败并报 `spawn EPERM`。这种情况下可以先构建前端，再使用不依赖 Vite 的静态预览代理：
+
+```bash
+npm --prefix frontend run build
+npm --prefix frontend run preview:static
+```
+
+`preview:static` 默认监听 `http://127.0.0.1:5173`，服务 `frontend/dist`，并把 `/api/*` 代理到 `http://127.0.0.1:8080`。后端仍需单独运行。
+
 ### 环境变量
 
 `GITHUB_TOKEN` 是可选配置，用于提高 GitHub API rate limit，或访问 token 有权限读取的私有仓库。
@@ -117,6 +139,32 @@ go test ./...
 node scripts/check-pr-quality.test.mjs
 npm --prefix frontend run build
 ```
+
+### 前端启动和 demo 验证
+
+启动后端和前端：
+
+```bash
+go run ./cmd/server
+npm --prefix frontend run dev
+```
+
+受限 Windows 环境可改用静态预览代理：
+
+```bash
+npm --prefix frontend run build
+npm --prefix frontend run preview:static
+```
+
+打开 Vite 输出的本地地址，通常是 `http://localhost:5173`。在页面中点击 `Run demo`，用于验证：
+
+- Pipeline 时间线持续接收 SSE 事件。
+- `Review Brief` 使用 `result` 中的归一化报告，而不是直接展示模型原始输出。
+- `Risk Radar` 可以筛选风险，点击风险会打开 `Evidence Drawer`。
+- `Suggested Comments` 的复制按钮可以复制单条评论或完整 review。
+- `AI Trace` 只显示 `ai_delta` 分析过程；demo 或真实模式中该事件缺席时，页面应保持可用。
+- `StatusBanner` 在 degraded report 中展示降级原因，例如未配置 `LLM_API_KEY`。
+- 在 375px、768px 和 1440px 宽度下检查单列/双列布局、按钮换行、长文件名、证据代码块和评论文本没有溢出。
 
 演示流接口：
 
@@ -151,6 +199,8 @@ curl -N -X POST http://localhost:8080/api/reviews/analyze/stream \
 - 规则扫描保留下来的风险
 
 配置可用模型后，`result` 会包含 AI summary、suggested comments，以及 `rule` / `ai` / `merged` 来源的 risks。模型结果是辅助 review 的候选信号，不保证发现所有问题。
+
+前端只把 `result` 作为最终 report 渲染；`ai_delta` 只进入 `AI Trace`，用于说明分析过程和模型阶段状态。真实模式下如果模型未配置、调用失败或后端提前降级，`ai_delta` 可以完全不存在。
 
 ## 当前限制
 

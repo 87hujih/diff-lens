@@ -33,3 +33,7 @@ Thumbs.db
 *.tsbuildinfo
 *~
 *~*
+
+# Python local artifacts
+__pycache__/
+*.py[cod]

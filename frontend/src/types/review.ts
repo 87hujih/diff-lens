@@ -1,5 +1,5 @@
-// ReviewEventType 对齐 Go 端通过 SSE 写出的 EventType 常量。
-export type ReviewEventType =
+// KnownReviewEventType 对齐 Go 端通过 SSE 写出的 EventType 常量。
+export type KnownReviewEventType =
   | "step"
   | "pr"
   | "rules"
@@ -8,17 +8,18 @@ export type ReviewEventType =
   | "error"
   | "done";
 
+// ReviewEventType accepts future backend event names without widening local actions.
+export type ReviewEventType = KnownReviewEventType | (string & {});
+
+export type RenderRiskLevel = "low" | "medium" | "high" | "unknown";
+export type RenderSeverity = "low" | "medium" | "high" | "unknown";
+export type RenderStepStatus = "running" | "completed" | "failed" | "unknown";
+
 // AnalyzeRequest 是前端发送流式分析请求时使用的请求体类型。
 export interface AnalyzeRequest {
   pr_url: string;
   github_token?: string;
   demo: boolean;
-}
-
-// ReviewEvent 包装一条来自后端的类型化 SSE 载荷。
-export interface ReviewEvent<T = unknown> {
-  type: ReviewEventType;
-  data: T;
 }
 
 // StepPayload 描述时间线中的一条进度项。
@@ -45,8 +46,8 @@ export interface PRInfo {
 // Risk 表示来自规则、AI 或合并证据的一条 review 风险。
 export interface Risk {
   id: string;
-  source: "rule" | "ai" | "merged";
-  severity: "low" | "medium" | "high";
+  source: "rule" | "ai" | "merged" | (string & {});
+  severity: string;
   confidence: number;
   category: string;
   title: string;
@@ -66,7 +67,7 @@ export interface RulesPayload {
 
 // Summary 是展示在详细风险上方的高层说明。
 export interface Summary {
-  risk_level: "low" | "medium" | "high";
+  risk_level: string;
   overview: string;
   key_changes: string[];
   review_focus: string[];
@@ -114,3 +115,20 @@ export interface DonePayload {
   ok: boolean;
   degraded?: boolean;
 }
+
+export type KnownReviewEvent =
+  | { type: "step"; data: StepPayload }
+  | { type: "pr"; data: PRInfo }
+  | { type: "rules"; data: RulesPayload }
+  | { type: "ai_delta"; data: unknown }
+  | { type: "result"; data: Report }
+  | { type: "error"; data: ErrorPayload }
+  | { type: "done"; data: DonePayload };
+
+export interface UnknownReviewEvent {
+  type: string;
+  data: unknown;
+}
+
+// ReviewEvent 包装一条来自后端的类型化 SSE 载荷。
+export type ReviewEvent = KnownReviewEvent | UnknownReviewEvent;
