@@ -5,9 +5,11 @@ import (
 
 	"diff-lens/internal/config"
 	"diff-lens/internal/demo"
+	"diff-lens/internal/diff"
 	"diff-lens/internal/github"
 	"diff-lens/internal/handler"
 	"diff-lens/internal/review"
+	"diff-lens/internal/rules"
 )
 
 func main() {
@@ -19,6 +21,8 @@ func main() {
 		GitHubClientFactory: func(token string) review.GitHubClient {
 			return github.NewClient(token)
 		},
+		DiffParser:   diff.NewParser(),
+		RulesScanner: rules.NewScanner(),
 	})
 	router := handler.NewRouter(service)
 
