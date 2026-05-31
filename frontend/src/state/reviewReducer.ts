@@ -36,8 +36,48 @@ export const initialReviewState: ReviewState = {
   degraded: false
 };
 
+export type ReviewAction =
+  | { type: "reset" }
+  | { type: "stream_event"; event: ReviewEvent }
+  | ReviewEvent;
+
+function asStreamEvent(action: ReviewAction): ReviewEvent | null {
+  if ("event" in action && action.type === "stream_event") {
+    return action.event;
+  }
+
+  if ("data" in action) {
+    return action;
+  }
+
+  return null;
+}
+
+function toDisplayText(value: unknown): string {
+  if (value == null) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    const json = JSON.stringify(value);
+    return json ?? "";
+  } catch {
+    return String(value);
+  }
+}
+
 // reviewReducer 将每个 SSE 事件折叠为可渲染的应用状态。
-export function reviewReducer(state: ReviewState, event: ReviewEvent): ReviewState {
+export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewState {
+  const event = asStreamEvent(action);
+
+  if (!event) {
+    return initialReviewState;
+  }
+
   switch (event.type) {
     case "step":
       return {
@@ -58,13 +98,13 @@ export function reviewReducer(state: ReviewState, event: ReviewEvent): ReviewSta
     case "ai_delta":
       return {
         ...state,
-        aiText: state.aiText + String(event.data)
+        aiText: state.aiText + toDisplayText(event.data)
       };
     case "result":
       return {
         ...state,
         result: event.data as Report,
-        degraded: Boolean((event.data as Report).degraded)
+        degraded: Boolean((event.data as Report).degraded || state.degraded)
       };
     case "error":
       return {

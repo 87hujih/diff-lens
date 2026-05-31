@@ -9,55 +9,109 @@ export async function analyzeReviewStream(
   onEvent: EventHandler,
   signal?: AbortSignal
 ): Promise<void> {
-  const response = await fetch("/api/reviews/analyze/stream", {
-    method: "POST",
-    headers: {
-      Accept: "text/event-stream",
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(request),
-    signal
-  });
+  try {
+    const response = await fetch("/api/reviews/analyze/stream", {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request),
+      signal
+    });
 
-  if (!response.ok || !response.body) {
-    throw new Error(`Stream request failed with status ${response.status}`);
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      break;
+    if (!response.ok) {
+      throw new Error(
+        `Stream request failed with status ${response.status} ${response.statusText}`.trim()
+      );
     }
 
-    // SSE chunk 可能截断在消息中间，因此保留最后一个未完整帧。
-    buffer += decoder.decode(value, { stream: true });
-    const messages = buffer.split(/\n\n/);
-    buffer = messages.pop() ?? "";
+    if (!response.body) {
+      throw new Error("Stream request failed: response body is missing");
+    }
 
-    for (const message of messages) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      // SSE chunk 可能截断在消息中间，因此保留最后一个未完整帧。
+      buffer += decoder.decode(value, { stream: true });
+      const messages = buffer.split(/\r?\n\r?\n/);
+      buffer = messages.pop() ?? "";
+
+      for (const message of messages) {
+        const event = parseSSEMessage(message);
+        if (event) {
+          onEvent(event);
+        }
+      }
+    }
+
+    buffer += decoder.decode();
+
+    for (const message of buffer.split(/\r?\n\r?\n/)) {
       const event = parseSSEMessage(message);
       if (event) {
         onEvent(event);
       }
     }
+  } catch (error) {
+    if (isAbortError(error)) {
+      return;
+    }
+
+    throw error;
   }
 }
 
-// parseSSEMessage 处理 Go 后端输出的简单 event/data 帧格式。
-function parseSSEMessage(message: string): ReviewEvent | null {
-  const eventLine = message.split("\n").find((line) => line.startsWith("event: "));
-  const dataLine = message.split("\n").find((line) => line.startsWith("data: "));
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
 
-  if (!eventLine || !dataLine) {
+// parseSSEMessage 处理标准 SSE event/data 帧格式。
+function parseSSEMessage(message: string): ReviewEvent | null {
+  let eventType: ReviewEventType | null = null;
+  const dataLines: string[] = [];
+
+  for (const rawLine of message.split(/\r?\n/)) {
+    if (rawLine === "" || rawLine.startsWith(":")) {
+      continue;
+    }
+
+    const separatorIndex = rawLine.indexOf(":");
+    const field = separatorIndex === -1 ? rawLine : rawLine.slice(0, separatorIndex);
+    let value = separatorIndex === -1 ? "" : rawLine.slice(separatorIndex + 1);
+
+    if (value.startsWith(" ")) {
+      value = value.slice(1);
+    }
+
+    if (field === "event") {
+      eventType = value as ReviewEventType;
+    }
+
+    if (field === "data") {
+      dataLines.push(value);
+    }
+  }
+
+  if (!eventType || dataLines.length === 0) {
     return null;
   }
 
-  return {
-    type: eventLine.slice("event: ".length) as ReviewEventType,
-    data: JSON.parse(dataLine.slice("data: ".length))
-  };
+  try {
+    return {
+      type: eventType,
+      data: JSON.parse(dataLines.join("\n"))
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "unknown parse error";
+    throw new Error(`Failed to parse SSE data for event "${eventType}": ${reason}`);
+  }
 }
