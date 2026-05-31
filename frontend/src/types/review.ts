@@ -52,6 +52,8 @@ export interface Risk {
   title: string;
   file?: string;
   line?: number;
+  rule_id?: string;
+  evidence_refs?: string[];
   evidence?: string;
   reason: string;
   suggestion: string;
@@ -76,6 +78,17 @@ export interface SuggestedComment {
   file?: string;
   line?: number;
   body: string;
+  evidence_refs?: string[];
+}
+
+// ReportMeta records which backend analysis stages contributed to a result.
+export interface ReportMeta {
+  ai_completed: boolean;
+  rules_completed: boolean;
+  context_truncated: boolean;
+  degraded_reason?: string;
+  omitted_files_count: number;
+  omitted_snippets_count: number;
 }
 
 // Report 是最终的结构化 review 结果。
@@ -84,6 +97,7 @@ export interface Report {
   summary: Summary;
   risks: Risk[];
   comments: SuggestedComment[];
+  meta: ReportMeta;
   degraded?: boolean;
 }
 

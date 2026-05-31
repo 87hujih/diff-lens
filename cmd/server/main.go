@@ -5,9 +5,12 @@ import (
 
 	"diff-lens/internal/config"
 	"diff-lens/internal/demo"
+	"diff-lens/internal/diff"
 	"diff-lens/internal/github"
 	"diff-lens/internal/handler"
+	"diff-lens/internal/llm"
 	"diff-lens/internal/review"
+	"diff-lens/internal/rules"
 )
 
 func main() {
@@ -19,6 +22,11 @@ func main() {
 		GitHubClientFactory: func(token string) review.GitHubClient {
 			return github.NewClient(token)
 		},
+		DiffParser:      diff.NewParser(),
+		RuleScanner:     rules.NewScanner(),
+		ContextBuilder:  review.NewContextBuilder(review.ContextBuilderOptions{}),
+		AIAnalyzer:      llm.NewAnalyzer(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel),
+		ReportGenerator: review.NewReportNormalizer(),
 	})
 	router := handler.NewRouter(service)
 
