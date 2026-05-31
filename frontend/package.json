@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && npm run build:assets && node scripts/write-build-html.mjs",
     "build:assets": "esbuild src/main.tsx --bundle --format=esm --target=es2022 --jsx=automatic --loader:.css=css --outdir=dist/assets --entry-names=index --asset-names=[name] --public-path=/assets",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:static": "python -B ../scripts/dev-static-proxy.py"
   },
   "dependencies": {
     "react": "^19.0.0",

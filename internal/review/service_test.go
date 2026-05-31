@@ -23,28 +23,28 @@ func TestAnalyzeDemoEmitsStableEventOrder(t *testing.T) {
 		t.Fatalf("Analyze returned error: %v", err)
 	}
 
-	var got []review.EventType
-	for event := range events {
-		got = append(got, event.Type)
-	}
+	got := collectEvents(t, events)
 
-	want := []review.EventType{
+	assertEventTypes(t, got, []review.EventType{
 		review.EventStep,
 		review.EventPR,
+		review.EventStep,
+		review.EventStep,
 		review.EventRules,
+		review.EventStep,
+		review.EventStep,
+		review.EventStep,
 		review.EventResult,
 		review.EventDone,
-	}
-
-	if len(got) != len(want) {
-		t.Fatalf("event count = %d, want %d; events=%v", len(got), len(want), got)
-	}
-
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("event %d = %q, want %q; events=%v", i, got[i], want[i], got)
-		}
-	}
+	})
+	assertStepSequence(t, got, []string{
+		"fetch_pr",
+		"parse_diff",
+		"scan_rules",
+		"build_context",
+		"analyze_ai",
+		"result",
+	})
 }
 
 func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
@@ -71,6 +71,7 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		review.EventStep,
 		review.EventStep,
 		review.EventRules,
+		review.EventStep,
 		review.EventStep,
 		review.EventStep,
 		review.EventStep,
@@ -474,5 +475,22 @@ func assertEventTypes(t *testing.T, events []review.ReviewEvent, want []review.E
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v", got, want)
+	}
+}
+
+func assertStepSequence(t *testing.T, events []review.ReviewEvent, want []string) {
+	t.Helper()
+
+	got := make([]string, 0, len(events))
+	for _, event := range events {
+		if event.Type != review.EventStep {
+			continue
+		}
+		step := event.Data.(review.StepPayload)
+		got = append(got, step.Step)
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("step sequence = %v, want %v", got, want)
 	}
 }

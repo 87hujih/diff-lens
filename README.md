@@ -99,6 +99,15 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
+如果当前 Windows 环境限制 Node 派生原生进程，Vite 可能在加载 esbuild 时失败并报 `spawn EPERM`。这种情况下可以先构建前端，再使用不依赖 Vite 的静态预览代理：
+
+```bash
+npm --prefix frontend run build
+npm --prefix frontend run preview:static
+```
+
+`preview:static` 默认监听 `http://127.0.0.1:5173`，服务 `frontend/dist`，并把 `/api/*` 代理到 `http://127.0.0.1:8080`。后端仍需单独运行。
+
 ### 环境变量
 
 `GITHUB_TOKEN` 是可选配置，用于提高 GitHub API rate limit，或访问 token 有权限读取的私有仓库。
@@ -138,6 +147,13 @@ npm --prefix frontend run build
 ```bash
 go run ./cmd/server
 npm --prefix frontend run dev
+```
+
+受限 Windows 环境可改用静态预览代理：
+
+```bash
+npm --prefix frontend run build
+npm --prefix frontend run preview:static
 ```
 
 打开 Vite 输出的本地地址，通常是 `http://localhost:5173`。在页面中点击 `Run demo`，用于验证：

@@ -6,7 +6,8 @@ const STEP_LABELS: Record<string, string> = {
   parse_diff: "Parse diff",
   scan_rules: "Scan rules",
   build_context: "Build context",
-  analyze_ai: "Analyze AI"
+  analyze_ai: "Analyze AI",
+  result: "Result"
 };
 
 function getStepLabel(stepId: string): string {

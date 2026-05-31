@@ -252,6 +252,9 @@ func (s *Service) runRealPipeline(ctx context.Context, out chan<- ReviewEvent, c
 		if !send(stepEvent("analyze_ai", "failed", "LLM 未配置，返回规则扫描降级报告")) {
 			return
 		}
+		if !send(stepEvent("result", "completed", "已生成规则扫描降级报告")) {
+			return
+		}
 		send(ReviewEvent{Type: EventResult, Data: report})
 		send(ReviewEvent{Type: EventDone, Data: DonePayload{OK: true, Degraded: true}})
 		return
@@ -262,6 +265,9 @@ func (s *Service) runRealPipeline(ctx context.Context, out chan<- ReviewEvent, c
 		reason := degradedReasonFromAnalyzerError(err)
 		report := s.reportGenerator.Degraded(pr, ruleRisks, reviewContext, reason)
 		if !send(stepEvent("analyze_ai", "failed", "AI 分析失败，返回规则扫描降级报告")) {
+			return
+		}
+		if !send(stepEvent("result", "completed", "已生成规则扫描降级报告")) {
 			return
 		}
 		send(ReviewEvent{Type: EventResult, Data: report})
@@ -275,6 +281,9 @@ func (s *Service) runRealPipeline(ctx context.Context, out chan<- ReviewEvent, c
 		AICompleted:    true,
 		RulesCompleted: true,
 	})
+	if !send(stepEvent("result", "completed", "已生成最终 Review 报告")) {
+		return
+	}
 	if !send(ReviewEvent{Type: EventResult, Data: report}) {
 		return
 	}
