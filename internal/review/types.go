@@ -93,6 +93,15 @@ type SuggestedComment struct {
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
+// EvidenceItem is a top-level, copyable evidence snippet cited by risks/comments.
+type EvidenceItem struct {
+	ID      string `json:"id"`
+	File    string `json:"file,omitempty"`
+	Line    int    `json:"line,omitempty"`
+	Snippet string `json:"snippet"`
+	Source  string `json:"source,omitempty"`
+}
+
 // ReportMeta records which analysis stages contributed to the final report.
 type ReportMeta struct {
 	AICompleted          bool   `json:"ai_completed"`
@@ -108,6 +117,7 @@ type Report struct {
 	PR       PRInfo             `json:"pr"`
 	Summary  Summary            `json:"summary"`
 	Risks    []Risk             `json:"risks"`
+	Evidence []EvidenceItem     `json:"evidence"`
 	Comments []SuggestedComment `json:"comments"`
 	Meta     ReportMeta         `json:"meta"`
 	Degraded bool               `json:"degraded,omitempty"`

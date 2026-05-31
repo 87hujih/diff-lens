@@ -345,6 +345,7 @@ func degradedReport(pr PRInfo) Report {
 			},
 		},
 		Risks:    []Risk{},
+		Evidence: []EvidenceItem{},
 		Comments: []SuggestedComment{},
 		Degraded: true,
 	}
