@@ -122,7 +122,7 @@ func TestAnalyzeStreamMapsGitHubErrorsToStructuredSSEErrors(t *testing.T) {
 			name:        "unknown",
 			err:         errors.New("unexpected analysis failure"),
 			wantCode:    "analysis_failed",
-			wantStage:   "",
+			wantStage:   "fetch_pr",
 			recoverable: false,
 		},
 	}

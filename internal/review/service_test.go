@@ -9,10 +9,8 @@ import (
 	"time"
 
 	"diff-lens/internal/demo"
-	"diff-lens/internal/diff"
 	"diff-lens/internal/github"
 	"diff-lens/internal/review"
-	"diff-lens/internal/rules"
 )
 
 func TestAnalyzeDemoEmitsStableEventOrder(t *testing.T) {
@@ -54,8 +52,6 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		GitHubClientFactory: func(token string) review.GitHubClient {
 			return &fakeGitHubClient{data: samplePullRequestData()}
 		},
-		DiffParser:   fakeDiffParser{},
-		RulesScanner: fakeRulesScanner{},
 	})
 
 	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
@@ -75,6 +71,10 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		review.EventStep,
 		review.EventStep,
 		review.EventRules,
+		review.EventStep,
+		review.EventStep,
+		review.EventStep,
+		review.EventStep,
 		review.EventResult,
 		review.EventDone,
 	})
@@ -106,18 +106,12 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		t.Fatalf("pr event = %#v, want %#v", pr, wantPR)
 	}
 
-	report := got[8].Data.(review.Report)
+	report := got[len(got)-2].Data.(review.Report)
 	if !report.Degraded {
 		t.Fatalf("result degraded = false, want true")
 	}
 	if report.PR != wantPR {
 		t.Fatalf("result PR = %#v, want %#v", report.PR, wantPR)
-	}
-	if strings.Contains(report.Summary.Overview, "diff 解析、规则扫描和 AI 分析尚未实现") {
-		t.Fatalf("result overview contains stale degraded copy: %q", report.Summary.Overview)
-	}
-	if !strings.Contains(report.Summary.Overview, "确定性 diff 解析和规则扫描") {
-		t.Fatalf("result overview = %q, want deterministic diff/rule scan copy", report.Summary.Overview)
 	}
 	if len(report.Risks) != 0 {
 		t.Fatalf("result risks = %d, want 0", len(report.Risks))
@@ -126,204 +120,78 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		t.Fatalf("result comments = %d, want 0", len(report.Comments))
 	}
 
-	done := got[9].Data.(review.DonePayload)
+	if report.Meta.AICompleted {
+		t.Fatalf("result meta ai_completed = true, want false")
+	}
+	if report.Meta.DegradedReason != "llm_not_configured" {
+		t.Fatalf("degraded_reason = %q, want llm_not_configured", report.Meta.DegradedReason)
+	}
+
+	done := got[len(got)-1].Data.(review.DonePayload)
 	if !done.OK || !done.Degraded {
 		t.Fatalf("done = %#v, want ok=true degraded=true", done)
 	}
 }
 
-func TestAnalyzeRealParsesGitHubFilesScansRulesAndMapsRisks(t *testing.T) {
-	parser := &capturingDiffParser{
-		analysis: diff.Analysis{
-			Stats: diff.FileStats{ChangedFiles: 2, Additions: 12, Deletions: 3},
-			Files: []diff.FileDiff{{Filename: "internal/service.go"}},
-		},
-	}
-	scanner := &capturingRulesScanner{
-		findings: []rules.Finding{{
-			ID:             "security.sensitive-information:internal/service.go:42:abc123",
-			RuleID:         "security.sensitive-information",
-			Severity:       "high",
-			Confidence:     0.91,
-			Category:       "security",
-			Title:          "Sensitive information added",
-			File:           "internal/service.go",
-			Line:           42,
-			MaskedEvidence: `api_token="<masked>"`,
-			Reason:         "Added code appears to include a credential.",
-			Suggestion:     "Move secrets to managed storage.",
-		}},
-	}
-	data := samplePullRequestData()
-	data.Files = []github.PullRequestFile{
-		{
-			Filename:  "internal/service.go",
-			Status:    "modified",
-			Additions: 12,
-			Deletions: 3,
-			Changes:   15,
-			Patch:     "@@ -1 +1 @@\n-old\n+api_token=\"secret\"\n",
-		},
-		{
-			Filename:  "assets/logo.png",
-			Status:    "added",
-			Additions: 0,
-			Deletions: 0,
-			Changes:   0,
-		},
+func TestAnalyzeRealReturnsBeforeFetchCompletes(t *testing.T) {
+	client := &blockingGitHubClient{
+		data:    samplePullRequestData(),
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
 	}
 	service := review.NewService(review.ServiceOptions{
 		GitHubClientFactory: func(token string) review.GitHubClient {
-			return &fakeGitHubClient{data: data}
+			return client
 		},
-		DiffParser:   parser,
-		RulesScanner: scanner,
 	})
 
-	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
-		PRURL: "https://github.com/openai/example/pull/123",
-	})
-	if err != nil {
-		t.Fatalf("Analyze returned error: %v", err)
-	}
-
-	got := collectEvents(t, events)
-	assertEventTypes(t, got, []review.EventType{
-		review.EventStep,
-		review.EventStep,
-		review.EventPR,
-		review.EventStep,
-		review.EventStep,
-		review.EventStep,
-		review.EventStep,
-		review.EventRules,
-		review.EventResult,
-		review.EventDone,
-	})
-
-	if len(parser.inputs) != 2 {
-		t.Fatalf("parser inputs = %d, want 2", len(parser.inputs))
-	}
-	wantFirstInput := diff.FileInput{
-		Filename:             "internal/service.go",
-		Status:               "modified",
-		Additions:            12,
-		Deletions:            3,
-		Changes:              15,
-		Patch:                "@@ -1 +1 @@\n-old\n+api_token=\"secret\"\n",
-		PatchBinaryOrOmitted: false,
-	}
-	if !reflect.DeepEqual(parser.inputs[0], wantFirstInput) {
-		t.Fatalf("first parser input = %#v, want %#v", parser.inputs[0], wantFirstInput)
-	}
-	if parser.inputs[1].PatchBinaryOrOmitted {
-		t.Fatalf("second parser input PatchBinaryOrOmitted = true, want false because GitHub data cannot express it")
-	}
-
-	if !reflect.DeepEqual(scanner.analysis, parser.analysis) {
-		t.Fatalf("scanner analysis = %#v, want parser analysis %#v", scanner.analysis, parser.analysis)
-	}
-
-	rulesPayload := got[7].Data.(review.RulesPayload)
-	wantRisk := review.Risk{
-		ID:         "security.sensitive-information:internal/service.go:42:abc123",
-		Source:     "rule",
-		Severity:   "high",
-		Confidence: 0.91,
-		Category:   "security",
-		Title:      "Sensitive information added",
-		File:       "internal/service.go",
-		Line:       42,
-		Evidence:   `api_token="<masked>"`,
-		Reason:     "Added code appears to include a credential.",
-		Suggestion: "Move secrets to managed storage.",
-	}
-	if !reflect.DeepEqual(rulesPayload.Risks, []review.Risk{wantRisk}) {
-		t.Fatalf("rules risks = %#v, want %#v", rulesPayload.Risks, []review.Risk{wantRisk})
-	}
-
-	report := got[8].Data.(review.Report)
-	if !report.Degraded {
-		t.Fatalf("report degraded = false, want true")
-	}
-	if report.Summary.RiskLevel != "high" {
-		t.Fatalf("report summary risk level = %q, want high", report.Summary.RiskLevel)
-	}
-	if !reflect.DeepEqual(report.Risks, []review.Risk{wantRisk}) {
-		t.Fatalf("report risks = %#v, want %#v", report.Risks, []review.Risk{wantRisk})
-	}
-}
-
-func TestAnalyzeRealStreamsPRBeforeParserCompletes(t *testing.T) {
-	parser := &blockingDiffParser{
-		started:  make(chan struct{}),
-		release:  make(chan struct{}),
-		analysis: diff.Analysis{},
-	}
-	service := review.NewService(review.ServiceOptions{
-		GitHubClientFactory: func(token string) review.GitHubClient {
-			return &fakeGitHubClient{data: samplePullRequestData()}
-		},
-		DiffParser:   parser,
-		RulesScanner: fakeRulesScanner{},
-	})
-
-	type analyzeResult struct {
+	type result struct {
 		events <-chan review.ReviewEvent
 		err    error
 	}
-	analyzeDone := make(chan analyzeResult, 1)
+	returned := make(chan result, 1)
 	go func() {
 		events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
 			PRURL: "https://github.com/openai/example/pull/123",
 		})
-		analyzeDone <- analyzeResult{events: events, err: err}
+		returned <- result{events: events, err: err}
 	}()
 
-	var result analyzeResult
+	var got result
 	select {
-	case result = <-analyzeDone:
-	case <-time.After(500 * time.Millisecond):
-		close(parser.release)
-		t.Fatal("Analyze did not return before parser completed")
+	case got = <-returned:
+	case <-time.After(100 * time.Millisecond):
+		close(client.release)
+		t.Fatal("Analyze did not return before GitHub fetch completed")
 	}
-	if result.err != nil {
-		t.Fatalf("Analyze returned error: %v", result.err)
-	}
-	events := result.events
-
-	assertNextEventType(t, events, review.EventStep)
-	assertNextEventType(t, events, review.EventStep)
-	prEvent := assertNextEventType(t, events, review.EventPR)
-	if _, ok := prEvent.Data.(review.PRInfo); !ok {
-		t.Fatalf("PR event data type = %T, want review.PRInfo", prEvent.Data)
+	if got.err != nil {
+		close(client.release)
+		t.Fatalf("Analyze returned error: %v", got.err)
 	}
 
 	select {
-	case <-parser.started:
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("parser did not start after PR event")
+	case first := <-got.events:
+		step := first.Data.(review.StepPayload)
+		if first.Type != review.EventStep || step.Step != "fetch_pr" || step.Status != "running" {
+			t.Fatalf("first event = %#v, want fetch_pr running", first)
+		}
+	case <-time.After(100 * time.Millisecond):
+		close(client.release)
+		t.Fatal("timed out waiting for first event")
 	}
 
-	assertNextEventType(t, events, review.EventStep)
-	select {
-	case event := <-events:
-		t.Fatalf("received event before parser was released: %#v", event)
-	default:
-	}
-
-	close(parser.release)
-	collectEvents(t, events)
+	close(client.release)
+	collectEvents(t, got.events)
 }
 
-func TestAnalyzeRealStreamsRecoverableParseDiffErrorAfterPREvent(t *testing.T) {
-	parseErr := errors.New("parse failed")
+func TestAnalyzeRealLLMSuccessProducesCompletedReport(t *testing.T) {
 	service := review.NewService(review.ServiceOptions{
 		GitHubClientFactory: func(token string) review.GitHubClient {
 			return &fakeGitHubClient{data: samplePullRequestData()}
 		},
-		DiffParser:   fakeDiffParser{err: parseErr},
-		RulesScanner: fakeRulesScanner{},
+		AIAnalyzer: fakeAIAnalyzer{
+			analysis: review.ReviewAnalysis{Summary: "AI summary"},
+		},
 	})
 
 	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
@@ -334,29 +202,44 @@ func TestAnalyzeRealStreamsRecoverableParseDiffErrorAfterPREvent(t *testing.T) {
 	}
 
 	got := collectEvents(t, events)
-	assertEventTypes(t, got, []review.EventType{
-		review.EventStep,
-		review.EventStep,
-		review.EventPR,
-		review.EventStep,
-		review.EventError,
-		review.EventDone,
+	report := got[len(got)-2].Data.(review.Report)
+	if report.Degraded {
+		t.Fatalf("result degraded = true, want false")
+	}
+	if !report.Meta.AICompleted {
+		t.Fatalf("result meta ai_completed = false, want true")
+	}
+	if report.Summary.Overview != "AI summary" {
+		t.Fatalf("overview = %q, want AI summary", report.Summary.Overview)
+	}
+}
+
+func TestAnalyzeRealLLMRecoverableErrorProducesDegradedResult(t *testing.T) {
+	service := review.NewService(review.ServiceOptions{
+		GitHubClientFactory: func(token string) review.GitHubClient {
+			return &fakeGitHubClient{data: samplePullRequestData()}
+		},
+		AIAnalyzer: fakeAIAnalyzer{err: fakeAnalyzerError{reason: "llm_output_invalid"}},
 	})
 
-	payload := got[4].Data.(review.ErrorPayload)
-	if payload.Code != "parse_diff_failed" {
-		t.Fatalf("code = %q, want parse_diff_failed", payload.Code)
-	}
-	if payload.Stage != "parse_diff" {
-		t.Fatalf("stage = %q, want parse_diff", payload.Stage)
-	}
-	if !payload.Recoverable {
-		t.Fatalf("recoverable = false, want true")
+	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
+		PRURL: "https://github.com/openai/example/pull/123",
+	})
+	if err != nil {
+		t.Fatalf("Analyze returned error: %v", err)
 	}
 
-	done := got[5].Data.(review.DonePayload)
-	if done.OK {
-		t.Fatalf("done OK = true, want false")
+	got := collectEvents(t, events)
+	report := got[len(got)-2].Data.(review.Report)
+	if !report.Degraded {
+		t.Fatalf("result degraded = false, want true")
+	}
+	if report.Meta.DegradedReason != "llm_output_invalid" {
+		t.Fatalf("degraded_reason = %q, want llm_output_invalid", report.Meta.DegradedReason)
+	}
+	done := got[len(got)-1].Data.(review.DonePayload)
+	if !done.OK || !done.Degraded {
+		t.Fatalf("done = %#v, want ok=true degraded=true", done)
 	}
 }
 
@@ -368,8 +251,6 @@ func TestAnalyzeRealUsesRequestGitHubTokenBeforeDefault(t *testing.T) {
 			gotToken = token
 			return &fakeGitHubClient{data: samplePullRequestData()}
 		},
-		DiffParser:   fakeDiffParser{},
-		RulesScanner: fakeRulesScanner{},
 	})
 
 	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
@@ -394,8 +275,6 @@ func TestAnalyzeRealUsesDefaultGitHubTokenWhenRequestTokenEmpty(t *testing.T) {
 			gotToken = token
 			return &fakeGitHubClient{data: samplePullRequestData()}
 		},
-		DiffParser:   fakeDiffParser{},
-		RulesScanner: fakeRulesScanner{},
 	})
 
 	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
@@ -444,8 +323,8 @@ func TestAnalyzeRealInvalidPRURLReturnsRecoverableAnalysisError(t *testing.T) {
 	}
 }
 
-func TestAnalyzeRealReturnsGitHubClientError(t *testing.T) {
-	clientErr := errors.New("github unavailable")
+func TestAnalyzeRealEmitsGitHubClientErrorEvent(t *testing.T) {
+	clientErr := github.ErrGitHubUnauthorized
 	service := review.NewService(review.ServiceOptions{
 		GitHubClientFactory: func(token string) review.GitHubClient {
 			return &fakeGitHubClient{err: clientErr}
@@ -466,12 +345,12 @@ func TestAnalyzeRealReturnsGitHubClientError(t *testing.T) {
 		review.EventDone,
 	})
 	payload := got[1].Data.(review.ErrorPayload)
-	if payload.Code != "analysis_failed" {
-		t.Fatalf("code = %q, want analysis_failed", payload.Code)
+	if payload.Code != "github_unauthorized" || payload.Stage != "fetch_pr" {
+		t.Fatalf("error payload = %#v, want github_unauthorized at fetch_pr", payload)
 	}
 	done := got[2].Data.(review.DonePayload)
 	if done.OK {
-		t.Fatalf("done OK = true, want false")
+		t.Fatalf("done ok = true, want false")
 	}
 }
 
@@ -498,60 +377,44 @@ type fakeGitHubClient struct {
 	refs []github.PRRef
 }
 
-type fakeDiffParser struct {
-	analysis diff.Analysis
+type blockingGitHubClient struct {
+	data    github.PullRequestData
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (c *blockingGitHubClient) FetchPullRequest(ctx context.Context, ref github.PRRef) (github.PullRequestData, error) {
+	close(c.entered)
+	select {
+	case <-ctx.Done():
+		return github.PullRequestData{}, ctx.Err()
+	case <-c.release:
+		return c.data, nil
+	}
+}
+
+type fakeAIAnalyzer struct {
+	analysis review.ReviewAnalysis
 	err      error
 }
 
-type blockingDiffParser struct {
-	started  chan struct{}
-	release  chan struct{}
-	analysis diff.Analysis
-	err      error
-}
-
-func (p *blockingDiffParser) ParseFiles(files []diff.FileInput) (diff.Analysis, error) {
-	close(p.started)
-	<-p.release
-	if p.err != nil {
-		return diff.Analysis{}, p.err
+func (a fakeAIAnalyzer) Analyze(ctx context.Context, input review.ReviewContext) (review.ReviewAnalysis, error) {
+	if a.err != nil {
+		return review.ReviewAnalysis{}, a.err
 	}
-	return p.analysis, nil
+	return a.analysis, nil
 }
 
-func (p fakeDiffParser) ParseFiles(files []diff.FileInput) (diff.Analysis, error) {
-	if p.err != nil {
-		return diff.Analysis{}, p.err
-	}
-	return p.analysis, nil
+type fakeAnalyzerError struct {
+	reason string
 }
 
-type capturingDiffParser struct {
-	inputs   []diff.FileInput
-	analysis diff.Analysis
+func (e fakeAnalyzerError) Error() string {
+	return e.reason
 }
 
-func (p *capturingDiffParser) ParseFiles(files []diff.FileInput) (diff.Analysis, error) {
-	p.inputs = append([]diff.FileInput(nil), files...)
-	return p.analysis, nil
-}
-
-type fakeRulesScanner struct {
-	findings []rules.Finding
-}
-
-func (s fakeRulesScanner) Scan(analysis diff.Analysis) []rules.Finding {
-	return s.findings
-}
-
-type capturingRulesScanner struct {
-	analysis diff.Analysis
-	findings []rules.Finding
-}
-
-func (s *capturingRulesScanner) Scan(analysis diff.Analysis) []rules.Finding {
-	s.analysis = analysis
-	return s.findings
+func (e fakeAnalyzerError) DegradedReason() string {
+	return e.reason
 }
 
 func (c *fakeGitHubClient) FetchPullRequest(ctx context.Context, ref github.PRRef) (github.PullRequestData, error) {
@@ -612,22 +475,4 @@ func assertEventTypes(t *testing.T, events []review.ReviewEvent, want []review.E
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v", got, want)
 	}
-}
-
-func assertNextEventType(t *testing.T, events <-chan review.ReviewEvent, want review.EventType) review.ReviewEvent {
-	t.Helper()
-
-	select {
-	case event, ok := <-events:
-		if !ok {
-			t.Fatalf("event stream closed, want %q", want)
-		}
-		if event.Type != want {
-			t.Fatalf("event type = %q, want %q", event.Type, want)
-		}
-		return event
-	case <-time.After(500 * time.Millisecond):
-		t.Fatalf("timed out waiting for event %q", want)
-	}
-	return review.ReviewEvent{}
 }
