@@ -1,7 +1,6 @@
 package diff
 
 import (
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -10,20 +9,19 @@ import (
 
 // FileStats 是从 diff 解析阶段传给规则扫描阶段的精简统计。
 type FileStats struct {
-	ChangedFiles              int
-	Additions                 int
-	Deletions                 int
-	TestFiles                 int
-	ConfigFiles               int
-	DependencyFiles           int
-	LockFiles                 int
-	CIFiles                   int
-	DocsFiles                 int
-	SourceFiles               int
-	MissingPatchFiles         int
-	BinaryOrOmittedPatchFiles int
-	HasSourceChanges          bool
-	HasTestChanges            bool
+	ChangedFiles      int
+	Additions         int
+	Deletions         int
+	SourceFiles       int
+	TestFiles         int
+	ConfigFiles       int
+	DependencyFiles   int
+	LockfileFiles     int
+	CIFiles           int
+	DocsFiles         int
+	MissingPatchFiles int
+	HasSourceChanges  bool
+	HasTestChanges    bool
 }
 
 // Parser 预留给 patch 解析和文件分类逻辑。
@@ -34,214 +32,217 @@ func NewParser() *Parser {
 	return &Parser{}
 }
 
-var hunkHeaderPattern = regexp.MustCompile(`^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@(.*)$`)
-
-// ParseFiles turns provider-neutral changed file inputs into structured diff
-// analysis. Recoverable per-file parse problems are returned as warnings.
+// ParseFiles is the failable service-facing parser entry point. The current
+// parser records malformed patch details as warnings instead of returning an
+// error, so this adapter returns a nil error.
 func (p *Parser) ParseFiles(files []FileInput) (Analysis, error) {
+	return p.Analyze(files), nil
+}
+
+// Analyze normalizes file inputs, classifies each file, and parses available
+// patch hunks without aborting analysis on malformed hunks.
+func (p *Parser) Analyze(files []FileInput) Analysis {
 	analysis := Analysis{
 		Files: make([]FileDiff, 0, len(files)),
+		Stats: FileStats{
+			ChangedFiles: len(files),
+		},
 	}
 
-	for _, input := range files {
-		kinds := ClassifyFile(input.Filename)
-		status := patchStatus(input)
-		file := FileDiff{
-			Filename:    input.Filename,
-			Status:      input.Status,
-			Kinds:       kinds,
-			Additions:   input.Additions,
-			Deletions:   input.Deletions,
-			Changes:     input.Changes,
-			Patch:       input.Patch,
-			HasPatch:    status == PatchStatusPresent,
-			PatchStatus: status,
-		}
+	for _, file := range files {
+		patchStatus := classifyPatchStatus(file)
+		kinds := ClassifyFile(file.Filename)
 
-		if status == PatchStatusPresent {
-			hunks, warnings := parsePatch(input.Filename, input.Patch)
-			file.Hunks = hunks
+		fileDiff := FileDiff{
+			Filename:    file.Filename,
+			Status:      file.Status,
+			Kinds:       kinds,
+			Additions:   file.Additions,
+			Deletions:   file.Deletions,
+			Changes:     file.Changes,
+			Patch:       file.Patch,
+			Hunks:       nil,
+			HasPatch:    patchStatus == PatchStatusPresent,
+			PatchStatus: patchStatus,
+		}
+		if patchStatus == PatchStatusPresent {
+			hunks, warnings := parsePatch(file.Filename, file.Patch)
+			fileDiff.Hunks = hunks
 			analysis.Warnings = append(analysis.Warnings, warnings...)
 		}
 
-		analysis.Files = append(analysis.Files, file)
-		addStats(&analysis.Stats, file)
+		analysis.Files = append(analysis.Files, fileDiff)
+		analysis.Stats.Additions += file.Additions
+		analysis.Stats.Deletions += file.Deletions
+		addKindStats(&analysis.Stats, kinds)
+		if patchStatus == PatchStatusMissing || patchStatus == PatchStatusBinaryOrOmitted {
+			analysis.Stats.MissingPatchFiles++
+		}
 	}
 
-	return analysis, nil
+	return analysis
 }
 
-// ClassifyFile returns all broad categories that apply to filename.
+// ClassifyFile returns all known roles for filename in stable order.
 func ClassifyFile(filename string) []FileKind {
-	normalized := strings.ReplaceAll(filename, `\`, `/`)
-	lower := strings.ToLower(normalized)
-	base := strings.ToLower(filepath.Base(lower))
+	normalized := normalizeFilename(filename)
+	base := pathBase(normalized)
 	ext := strings.ToLower(filepath.Ext(base))
 
 	var kinds []FileKind
-	if isTestFile(lower, base) {
+	if isSourceFile(ext) {
+		kinds = append(kinds, FileKindSource)
+	}
+	if isTestFile(normalized, base) {
 		kinds = append(kinds, FileKindTest)
 	}
-	if isCIFile(lower, base) {
+	if isCIFile(normalized, base) {
 		kinds = append(kinds, FileKindCI)
 	}
-	if isDependencyFile(lower, base) {
-		kinds = append(kinds, FileKindDependency)
-	}
-	if isLockFile(lower, base) {
-		kinds = append(kinds, FileKindLockfile)
-	}
-	if isDocsFile(lower, ext) {
-		kinds = append(kinds, FileKindDocs)
-	}
-	if isConfigFile(lower, base, ext) {
+	if isConfigFile(normalized, base, ext) {
 		kinds = append(kinds, FileKindConfig)
 	}
-	if isSourceFile(ext) && !hasKind(kinds, FileKindTest) {
-		kinds = append(kinds, FileKindSource)
+	if isDependencyFile(normalized, base) {
+		kinds = append(kinds, FileKindDependency)
+	}
+	if isLockfile(base) {
+		kinds = append(kinds, FileKindLockfile)
+	}
+	if isDocsFile(normalized, base, ext) {
+		kinds = append(kinds, FileKindDocs)
 	}
 
 	return kinds
 }
 
-func patchStatus(input FileInput) PatchStatus {
-	switch {
-	case input.BinaryOrOmitted:
-		return PatchStatusBinaryOrOmitted
-	case input.PatchMissing:
-		return PatchStatusMissing
-	case input.Patch == "":
-		return PatchStatusEmpty
+func normalizeFilename(filename string) string {
+	return strings.ToLower(strings.ReplaceAll(filename, "\\", "/"))
+}
+
+func pathBase(filename string) string {
+	idx := strings.LastIndex(filename, "/")
+	if idx == -1 {
+		return filename
+	}
+	return filename[idx+1:]
+}
+
+func isSourceFile(ext string) bool {
+	switch ext {
+	case ".go", ".ts", ".tsx", ".js":
+		return true
 	default:
-		return PatchStatusPresent
+		return false
 	}
 }
 
-func parsePatch(filename, patch string) ([]DiffHunk, []Warning) {
-	lines := strings.Split(patch, "\n")
-	hunks := make([]DiffHunk, 0)
-	warnings := make([]Warning, 0)
-	var current *DiffHunk
-	oldLine := 0
-	newLine := 0
-
-	flush := func() {
-		if current == nil {
-			return
-		}
-		hunks = append(hunks, *current)
-		current = nil
+func isTestFile(filename, base string) bool {
+	if strings.HasPrefix(filename, "__tests__/") || strings.HasPrefix(filename, "test/") || strings.HasPrefix(filename, "tests/") {
+		return true
+	}
+	if strings.Contains(filename, "/__tests__/") || strings.Contains(filename, "/test/") || strings.Contains(filename, "/tests/") {
+		return true
 	}
 
-	for idx, rawLine := range lines {
-		lineNumber := idx + 1
-		line := strings.TrimSuffix(rawLine, "\r")
-		if line == `\ No newline at end of file` {
-			continue
-		}
-
-		if strings.HasPrefix(line, "@@") {
-			match := hunkHeaderPattern.FindStringSubmatch(line)
-			if match == nil {
-				warnings = append(warnings, Warning{
-					File:    filename,
-					Line:    lineNumber,
-					Message: "malformed hunk header",
-				})
-				flush()
-				continue
-			}
-
-			flush()
-			oldStart, oldCount := parseRange(match[1], match[2])
-			newStart, newCount := parseRange(match[3], match[4])
-			current = &DiffHunk{
-				Header:   line,
-				Context:  strings.TrimSpace(match[5]),
-				OldStart: oldStart,
-				OldCount: oldCount,
-				NewStart: newStart,
-				NewCount: newCount,
-			}
-			oldLine = oldStart
-			newLine = newStart
-			continue
-		}
-
-		if current == nil {
-			continue
-		}
-
-		if line == "" {
-			current.Lines = append(current.Lines, DiffLine{
-				Type:    DiffLineContext,
-				OldLine: oldLine,
-				NewLine: newLine,
-				Content: "",
-			})
-			oldLine++
-			newLine++
-			continue
-		}
-
-		switch line[0] {
-		case '+':
-			current.Lines = append(current.Lines, DiffLine{
-				Type:    DiffLineAdded,
-				NewLine: newLine,
-				Content: line[1:],
-			})
-			newLine++
-		case '-':
-			current.Lines = append(current.Lines, DiffLine{
-				Type:    DiffLineRemoved,
-				OldLine: oldLine,
-				Content: line[1:],
-			})
-			oldLine++
-		case ' ':
-			current.Lines = append(current.Lines, DiffLine{
-				Type:    DiffLineContext,
-				OldLine: oldLine,
-				NewLine: newLine,
-				Content: line[1:],
-			})
-			oldLine++
-			newLine++
-		default:
-			warnings = append(warnings, Warning{
-				File:    filename,
-				Line:    lineNumber,
-				Message: fmt.Sprintf("unexpected diff line %q", line),
-			})
+	testSuffixes := []string{
+		"_test.go",
+		".test.ts",
+		".test.tsx",
+		".test.js",
+		".spec.ts",
+		".spec.tsx",
+		".spec.js",
+	}
+	for _, suffix := range testSuffixes {
+		if strings.HasSuffix(base, suffix) {
+			return true
 		}
 	}
-	flush()
-
-	return hunks, warnings
+	return false
 }
 
-func parseRange(start, count string) (int, int) {
-	parsedStart, _ := strconv.Atoi(start)
-	if count == "" {
-		return parsedStart, 1
+func isCIFile(filename, base string) bool {
+	if strings.HasPrefix(filename, ".github/workflows/") {
+		return true
 	}
-	parsedCount, _ := strconv.Atoi(count)
-	return parsedStart, parsedCount
+
+	switch base {
+	case ".gitlab-ci.yml", ".gitlab-ci.yaml", "azure-pipelines.yml", "azure-pipelines.yaml", "jenkinsfile":
+		return true
+	default:
+		return strings.HasPrefix(filename, ".circleci/")
+	}
 }
 
-func addStats(stats *FileStats, file FileDiff) {
-	stats.ChangedFiles++
-	stats.Additions += file.Additions
-	stats.Deletions += file.Deletions
+func isConfigFile(filename, base, ext string) bool {
+	if strings.HasPrefix(filename, ".github/workflows/") || strings.HasPrefix(filename, ".circleci/") {
+		return true
+	}
 
-	if file.PatchStatus == PatchStatusMissing {
-		stats.MissingPatchFiles++
+	switch base {
+	case "dockerfile", "makefile", ".editorconfig", ".gitignore", ".golangci.yml", ".golangci.yaml":
+		return true
 	}
-	if file.PatchStatus == PatchStatusBinaryOrOmitted {
-		stats.BinaryOrOmittedPatchFiles++
+
+	switch ext {
+	case ".json", ".yaml", ".yml", ".toml", ".ini", ".env":
+		return true
+	default:
+		return false
 	}
-	for _, kind := range file.Kinds {
+}
+
+func isDependencyFile(filename, base string) bool {
+	switch base {
+	case "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+		"go.mod", "go.sum", "requirements.txt", "pyproject.toml", "poetry.lock",
+		"cargo.toml", "cargo.lock", "gemfile", "gemfile.lock":
+		return true
+	default:
+		return strings.HasPrefix(filename, "vendor/") || strings.Contains(filename, "/vendor/")
+	}
+}
+
+func isLockfile(base string) bool {
+	switch base {
+	case "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "go.sum", "poetry.lock", "cargo.lock", "gemfile.lock":
+		return true
+	default:
+		return false
+	}
+}
+
+func isDocsFile(filename, base, ext string) bool {
+	if base == "readme.md" || strings.HasPrefix(base, "readme.") {
+		return true
+	}
+	if strings.HasPrefix(filename, "docs/") || strings.Contains(filename, "/docs/") {
+		return true
+	}
+
+	switch ext {
+	case ".md", ".rst", ".adoc":
+		return true
+	default:
+		return false
+	}
+}
+
+func classifyPatchStatus(file FileInput) PatchStatus {
+	if file.PatchBinaryOrOmitted {
+		return PatchStatusBinaryOrOmitted
+	}
+	if file.Patch == "" {
+		return PatchStatusMissing
+	}
+	if strings.TrimSpace(file.Patch) == "" {
+		return PatchStatusEmpty
+	}
+	return PatchStatusPresent
+}
+
+func addKindStats(stats *FileStats, kinds []FileKind) {
+	for _, kind := range kinds {
 		switch kind {
 		case FileKindSource:
 			stats.SourceFiles++
@@ -254,7 +255,7 @@ func addStats(stats *FileStats, file FileDiff) {
 		case FileKindDependency:
 			stats.DependencyFiles++
 		case FileKindLockfile:
-			stats.LockFiles++
+			stats.LockfileFiles++
 		case FileKindCI:
 			stats.CIFiles++
 		case FileKindDocs:
@@ -263,88 +264,108 @@ func addStats(stats *FileStats, file FileDiff) {
 	}
 }
 
-func isTestFile(path, base string) bool {
-	return strings.HasSuffix(base, "_test.go") ||
-		strings.Contains(base, ".test.") ||
-		strings.Contains(base, ".spec.") ||
-		strings.Contains(path, "/test/") ||
-		strings.Contains(path, "/tests/")
-}
+var hunkHeaderPattern = regexp.MustCompile(`^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@ ?(.*)$`)
 
-func isCIFile(path, base string) bool {
-	return strings.HasPrefix(path, ".github/workflows/") ||
-		base == ".gitlab-ci.yml" ||
-		base == ".travis.yml" ||
-		base == "azure-pipelines.yml" ||
-		strings.Contains(path, ".circleci/")
-}
+func parsePatch(filename, patch string) ([]Hunk, []Warning) {
+	lines := strings.Split(patch, "\n")
+	hunks := make([]Hunk, 0)
+	var warnings []Warning
+	var current *Hunk
+	var oldLine int
+	var newLine int
 
-func isDependencyFile(path, base string) bool {
-	switch base {
-	case "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
-		"go.mod", "go.sum", "requirements.txt", "poetry.lock", "pipfile",
-		"pipfile.lock", "cargo.toml", "cargo.lock", "gemfile", "gemfile.lock",
-		"composer.json", "composer.lock":
-		return true
-	}
-	return strings.HasSuffix(path, "/requirements.txt")
-}
+	for idx, line := range lines {
+		if strings.HasPrefix(line, `\ No newline at end of file`) {
+			continue
+		}
 
-func isLockFile(_ string, base string) bool {
-	return strings.HasSuffix(base, ".lock") ||
-		base == "package-lock.json" ||
-		base == "yarn.lock" ||
-		base == "pnpm-lock.yaml" ||
-		base == "go.sum" ||
-		base == "cargo.lock" ||
-		base == "gemfile.lock" ||
-		base == "composer.lock"
-}
+		if strings.HasPrefix(line, "@@") {
+			match := hunkHeaderPattern.FindStringSubmatch(line)
+			if match == nil {
+				warnings = append(warnings, Warning{
+					Filename: filename,
+					Message:  "malformed patch hunk header: " + line,
+				})
+				current = nil
+				continue
+			}
 
-func isDocsFile(path, ext string) bool {
-	return ext == ".md" ||
-		ext == ".mdx" ||
-		ext == ".rst" ||
-		ext == ".txt" ||
-		strings.HasPrefix(path, "docs/")
-}
+			parsedOldLine, err := strconv.Atoi(match[1])
+			if err != nil {
+				warnings = append(warnings, Warning{
+					Filename: filename,
+					Message:  "malformed patch hunk old start: " + line,
+				})
+				current = nil
+				continue
+			}
+			parsedNewLine, err := strconv.Atoi(match[3])
+			if err != nil {
+				warnings = append(warnings, Warning{
+					Filename: filename,
+					Message:  "malformed patch hunk new start: " + line,
+				})
+				current = nil
+				continue
+			}
 
-func isConfigFile(path, base, ext string) bool {
-	if isDependencyFile(path, base) {
-		return false
-	}
-	if isCIFile(path, base) {
-		return true
-	}
-	if base == "dockerfile" || strings.HasPrefix(base, "dockerfile.") {
-		return true
-	}
-	if strings.HasPrefix(base, ".env") {
-		return true
-	}
-	switch ext {
-	case ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".xml":
-		return true
-	}
-	return strings.HasPrefix(base, ".")
-}
+			hunks = append(hunks, Hunk{
+				Header:  line,
+				Context: strings.TrimSpace(match[5]),
+				Lines:   []DiffLine{},
+			})
+			current = &hunks[len(hunks)-1]
+			oldLine = parsedOldLine
+			newLine = parsedNewLine
+			continue
+		}
 
-func isSourceFile(ext string) bool {
-	switch ext {
-	case ".go", ".ts", ".tsx", ".js", ".jsx", ".py", ".rb", ".rs", ".java",
-		".kt", ".kts", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".php",
-		".swift", ".m", ".mm":
-		return true
-	default:
-		return false
-	}
-}
+		if current == nil {
+			continue
+		}
 
-func hasKind(kinds []FileKind, want FileKind) bool {
-	for _, kind := range kinds {
-		if kind == want {
-			return true
+		if line == "" {
+			if idx == len(lines)-1 {
+				continue
+			}
+			warnings = append(warnings, Warning{
+				Filename: filename,
+				Message:  "malformed patch line outside unified diff marker",
+			})
+			continue
+		}
+
+		switch line[0] {
+		case '+':
+			current.Lines = append(current.Lines, DiffLine{
+				Kind:    DiffLineAdded,
+				Content: line[1:],
+				NewLine: newLine,
+			})
+			newLine++
+		case '-':
+			current.Lines = append(current.Lines, DiffLine{
+				Kind:    DiffLineRemoved,
+				Content: line[1:],
+				OldLine: oldLine,
+			})
+			oldLine++
+		case ' ':
+			current.Lines = append(current.Lines, DiffLine{
+				Kind:    DiffLineContext,
+				Content: line[1:],
+				OldLine: oldLine,
+				NewLine: newLine,
+			})
+			oldLine++
+			newLine++
+		default:
+			warnings = append(warnings, Warning{
+				Filename: filename,
+				Message:  "malformed patch line: " + line,
+			})
 		}
 	}
-	return false
+
+	return hunks, warnings
 }

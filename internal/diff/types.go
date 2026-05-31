@@ -1,6 +1,7 @@
 package diff
 
-// FileKind describes broad, non-exclusive categories for a changed file.
+// FileKind describes one language-neutral role a changed file can play.
+// Classification is multi-label, so a file can have multiple kinds.
 type FileKind string
 
 const (
@@ -13,7 +14,7 @@ const (
 	FileKindDocs       FileKind = "docs"
 )
 
-// PatchStatus records whether patch text was available for a file.
+// PatchStatus describes whether patch text is available for analysis.
 type PatchStatus string
 
 const (
@@ -23,35 +24,25 @@ const (
 	PatchStatusBinaryOrOmitted PatchStatus = "binary_or_omitted"
 )
 
-// DiffLineType identifies how a line participates in a hunk.
-type DiffLineType string
-
-const (
-	DiffLineContext DiffLineType = "context"
-	DiffLineAdded   DiffLineType = "added"
-	DiffLineRemoved DiffLineType = "removed"
-)
-
-// FileInput is the parser's provider-neutral input for one changed file.
+// FileInput is the service-neutral shape accepted by the diff parser.
 type FileInput struct {
-	Filename        string
-	Status          string
-	Additions       int
-	Deletions       int
-	Changes         int
-	Patch           string
-	PatchMissing    bool
-	BinaryOrOmitted bool
+	Filename             string
+	Status               string
+	Additions            int
+	Deletions            int
+	Changes              int
+	Patch                string
+	PatchBinaryOrOmitted bool
 }
 
-// Analysis is the parser output consumed by later review stages.
+// Analysis is the language-neutral output passed to downstream scanners.
 type Analysis struct {
 	Files    []FileDiff
 	Stats    FileStats
 	Warnings []Warning
 }
 
-// FileDiff contains parsed patch data and metadata for one file.
+// FileDiff is the normalized representation of one changed file.
 type FileDiff struct {
 	Filename    string
 	Status      string
@@ -60,34 +51,37 @@ type FileDiff struct {
 	Deletions   int
 	Changes     int
 	Patch       string
-	Hunks       []DiffHunk
+	Hunks       []Hunk
 	HasPatch    bool
 	PatchStatus PatchStatus
 }
 
-// DiffHunk is one unified diff hunk.
-type DiffHunk struct {
-	Header   string
-	Context  string
-	OldStart int
-	OldCount int
-	NewStart int
-	NewCount int
-	Lines    []DiffLine
+// Hunk is reserved for parsed patch hunk data.
+type Hunk struct {
+	Header  string
+	Context string
+	Lines   []DiffLine
 }
 
-// DiffLine is a parsed line inside a hunk. Only one of OldLine/NewLine is set
-// for removed or added lines; context lines have both.
+// DiffLineKind describes the role of a parsed line within a patch hunk.
+type DiffLineKind string
+
+const (
+	DiffLineAdded   DiffLineKind = "added"
+	DiffLineRemoved DiffLineKind = "removed"
+	DiffLineContext DiffLineKind = "context"
+)
+
+// DiffLine is one parsed line in a unified diff hunk.
 type DiffLine struct {
-	Type    DiffLineType
+	Kind    DiffLineKind
+	Content string
 	OldLine int
 	NewLine int
-	Content string
 }
 
-// Warning records recoverable parse issues.
+// Warning describes non-fatal issues encountered during diff analysis.
 type Warning struct {
-	File    string
-	Message string
-	Line    int
+	Filename string
+	Message  string
 }
