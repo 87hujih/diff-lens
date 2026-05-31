@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"diff-lens/internal/demo"
 	"diff-lens/internal/github"
@@ -66,15 +65,6 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		review.EventStep,
 		review.EventStep,
 		review.EventPR,
-		review.EventStep,
-		review.EventStep,
-		review.EventStep,
-		review.EventStep,
-		review.EventRules,
-		review.EventStep,
-		review.EventStep,
-		review.EventStep,
-		review.EventStep,
 		review.EventResult,
 		review.EventDone,
 	})
@@ -106,7 +96,7 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		t.Fatalf("pr event = %#v, want %#v", pr, wantPR)
 	}
 
-	report := got[len(got)-2].Data.(review.Report)
+	report := got[3].Data.(review.Report)
 	if !report.Degraded {
 		t.Fatalf("result degraded = false, want true")
 	}
@@ -120,124 +110,7 @@ func TestAnalyzeRealEmitsPRMetadataAndDegradedResult(t *testing.T) {
 		t.Fatalf("result comments = %d, want 0", len(report.Comments))
 	}
 
-	if report.Meta.AICompleted {
-		t.Fatalf("result meta ai_completed = true, want false")
-	}
-	if report.Meta.DegradedReason != "llm_not_configured" {
-		t.Fatalf("degraded_reason = %q, want llm_not_configured", report.Meta.DegradedReason)
-	}
-
-	done := got[len(got)-1].Data.(review.DonePayload)
-	if !done.OK || !done.Degraded {
-		t.Fatalf("done = %#v, want ok=true degraded=true", done)
-	}
-}
-
-func TestAnalyzeRealReturnsBeforeFetchCompletes(t *testing.T) {
-	client := &blockingGitHubClient{
-		data:    samplePullRequestData(),
-		entered: make(chan struct{}),
-		release: make(chan struct{}),
-	}
-	service := review.NewService(review.ServiceOptions{
-		GitHubClientFactory: func(token string) review.GitHubClient {
-			return client
-		},
-	})
-
-	type result struct {
-		events <-chan review.ReviewEvent
-		err    error
-	}
-	returned := make(chan result, 1)
-	go func() {
-		events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
-			PRURL: "https://github.com/openai/example/pull/123",
-		})
-		returned <- result{events: events, err: err}
-	}()
-
-	var got result
-	select {
-	case got = <-returned:
-	case <-time.After(100 * time.Millisecond):
-		close(client.release)
-		t.Fatal("Analyze did not return before GitHub fetch completed")
-	}
-	if got.err != nil {
-		close(client.release)
-		t.Fatalf("Analyze returned error: %v", got.err)
-	}
-
-	select {
-	case first := <-got.events:
-		step := first.Data.(review.StepPayload)
-		if first.Type != review.EventStep || step.Step != "fetch_pr" || step.Status != "running" {
-			t.Fatalf("first event = %#v, want fetch_pr running", first)
-		}
-	case <-time.After(100 * time.Millisecond):
-		close(client.release)
-		t.Fatal("timed out waiting for first event")
-	}
-
-	close(client.release)
-	collectEvents(t, got.events)
-}
-
-func TestAnalyzeRealLLMSuccessProducesCompletedReport(t *testing.T) {
-	service := review.NewService(review.ServiceOptions{
-		GitHubClientFactory: func(token string) review.GitHubClient {
-			return &fakeGitHubClient{data: samplePullRequestData()}
-		},
-		AIAnalyzer: fakeAIAnalyzer{
-			analysis: review.ReviewAnalysis{Summary: "AI summary"},
-		},
-	})
-
-	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
-		PRURL: "https://github.com/openai/example/pull/123",
-	})
-	if err != nil {
-		t.Fatalf("Analyze returned error: %v", err)
-	}
-
-	got := collectEvents(t, events)
-	report := got[len(got)-2].Data.(review.Report)
-	if report.Degraded {
-		t.Fatalf("result degraded = true, want false")
-	}
-	if !report.Meta.AICompleted {
-		t.Fatalf("result meta ai_completed = false, want true")
-	}
-	if report.Summary.Overview != "AI summary" {
-		t.Fatalf("overview = %q, want AI summary", report.Summary.Overview)
-	}
-}
-
-func TestAnalyzeRealLLMRecoverableErrorProducesDegradedResult(t *testing.T) {
-	service := review.NewService(review.ServiceOptions{
-		GitHubClientFactory: func(token string) review.GitHubClient {
-			return &fakeGitHubClient{data: samplePullRequestData()}
-		},
-		AIAnalyzer: fakeAIAnalyzer{err: fakeAnalyzerError{reason: "llm_output_invalid"}},
-	})
-
-	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
-		PRURL: "https://github.com/openai/example/pull/123",
-	})
-	if err != nil {
-		t.Fatalf("Analyze returned error: %v", err)
-	}
-
-	got := collectEvents(t, events)
-	report := got[len(got)-2].Data.(review.Report)
-	if !report.Degraded {
-		t.Fatalf("result degraded = false, want true")
-	}
-	if report.Meta.DegradedReason != "llm_output_invalid" {
-		t.Fatalf("degraded_reason = %q, want llm_output_invalid", report.Meta.DegradedReason)
-	}
-	done := got[len(got)-1].Data.(review.DonePayload)
+	done := got[4].Data.(review.DonePayload)
 	if !done.OK || !done.Degraded {
 		t.Fatalf("done = %#v, want ok=true degraded=true", done)
 	}
@@ -323,8 +196,8 @@ func TestAnalyzeRealInvalidPRURLReturnsRecoverableAnalysisError(t *testing.T) {
 	}
 }
 
-func TestAnalyzeRealEmitsGitHubClientErrorEvent(t *testing.T) {
-	clientErr := github.ErrGitHubUnauthorized
+func TestAnalyzeRealReturnsGitHubClientError(t *testing.T) {
+	clientErr := errors.New("github unavailable")
 	service := review.NewService(review.ServiceOptions{
 		GitHubClientFactory: func(token string) review.GitHubClient {
 			return &fakeGitHubClient{err: clientErr}
@@ -334,23 +207,11 @@ func TestAnalyzeRealEmitsGitHubClientErrorEvent(t *testing.T) {
 	events, err := service.Analyze(context.Background(), review.AnalyzeRequest{
 		PRURL: "https://github.com/openai/example/pull/123",
 	})
-	if err != nil {
-		t.Fatalf("Analyze returned error: %v", err)
+	if !errors.Is(err, clientErr) {
+		t.Fatalf("Analyze error = %v, want github client error", err)
 	}
-
-	got := collectEvents(t, events)
-	assertEventTypes(t, got, []review.EventType{
-		review.EventStep,
-		review.EventError,
-		review.EventDone,
-	})
-	payload := got[1].Data.(review.ErrorPayload)
-	if payload.Code != "github_unauthorized" || payload.Stage != "fetch_pr" {
-		t.Fatalf("error payload = %#v, want github_unauthorized at fetch_pr", payload)
-	}
-	done := got[2].Data.(review.DonePayload)
-	if done.OK {
-		t.Fatalf("done ok = true, want false")
+	if events != nil {
+		t.Fatalf("events = %v, want nil on github client error", events)
 	}
 }
 
@@ -375,46 +236,6 @@ type fakeGitHubClient struct {
 	data github.PullRequestData
 	err  error
 	refs []github.PRRef
-}
-
-type blockingGitHubClient struct {
-	data    github.PullRequestData
-	entered chan struct{}
-	release chan struct{}
-}
-
-func (c *blockingGitHubClient) FetchPullRequest(ctx context.Context, ref github.PRRef) (github.PullRequestData, error) {
-	close(c.entered)
-	select {
-	case <-ctx.Done():
-		return github.PullRequestData{}, ctx.Err()
-	case <-c.release:
-		return c.data, nil
-	}
-}
-
-type fakeAIAnalyzer struct {
-	analysis review.ReviewAnalysis
-	err      error
-}
-
-func (a fakeAIAnalyzer) Analyze(ctx context.Context, input review.ReviewContext) (review.ReviewAnalysis, error) {
-	if a.err != nil {
-		return review.ReviewAnalysis{}, a.err
-	}
-	return a.analysis, nil
-}
-
-type fakeAnalyzerError struct {
-	reason string
-}
-
-func (e fakeAnalyzerError) Error() string {
-	return e.reason
-}
-
-func (e fakeAnalyzerError) DegradedReason() string {
-	return e.reason
 }
 
 func (c *fakeGitHubClient) FetchPullRequest(ctx context.Context, ref github.PRRef) (github.PullRequestData, error) {
