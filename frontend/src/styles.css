@@ -1,6 +1,25 @@
+/* 全局主题变量和基础排版。 */
 :root {
-  color: #f8fafc;
-  background: #0f172a;
+  --color-bg: #0b1120;
+  --color-panel: #111827;
+  --color-panel-raised: #172033;
+  --color-control: #0f172a;
+  --color-border: #2f3b4f;
+  --color-border-strong: #475569;
+  --color-text: #f8fafc;
+  --color-text-soft: #dbe4ef;
+  --color-muted: #9fb0c3;
+  --color-accent: #22c55e;
+  --color-accent-hover: #4ade80;
+  --color-info: #38bdf8;
+  --color-warning: #facc15;
+  --color-danger: #f87171;
+  --color-code: #020617;
+  --radius-panel: 8px;
+  --radius-control: 6px;
+  --space-page: 28px;
+  color: var(--color-text);
+  background: var(--color-bg);
   font-family:
     "Fira Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -10,15 +29,16 @@
   box-sizing: border-box;
 }
 
+/* 页面级基础样式保持深色工作台观感。 */
 html {
-  background: #0f172a;
+  background: var(--color-bg);
   -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  color: #f8fafc;
-  background: #0f172a;
+  color: var(--color-text);
+  background: var(--color-bg);
 }
 
 button,
@@ -27,36 +47,47 @@ summary {
   font: inherit;
 }
 
+/* 移动端点击目标使用浏览器原生手势优化。 */
 button,
 summary,
 [role="button"] {
   touch-action: manipulation;
 }
 
+/* 应用外壳提供首屏背景和整体高度。 */
 .app-shell {
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(30, 41, 59, 0.62), rgba(15, 23, 42, 0) 260px),
-    #0f172a;
+  background: var(--color-bg);
 }
 
+/* 顶部输入区承载 PR 地址、token 和启动动作。 */
 .input-panel {
   display: grid;
   grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1.45fr);
-  gap: 24px;
+  gap: 28px;
   align-items: end;
-  padding: 24px 28px;
-  background: rgba(30, 41, 59, 0.82);
-  border-bottom: 1px solid #334155;
+  width: min(100%, 1480px);
+  padding: 22px var(--space-page);
+  margin: 0 auto;
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .input-panel__heading h1 {
   max-width: 340px;
 }
 
+.input-panel__subtitle {
+  max-width: 42ch;
+  margin: 8px 0 0;
+  color: var(--color-text-soft);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .eyebrow {
   margin: 0 0 8px;
-  color: #94a3b8;
+  color: var(--color-muted);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0;
@@ -72,10 +103,12 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.1;
+  text-wrap: balance;
 }
 
+/* 表单字段使用紧凑网格，适配窄屏换行。 */
 .review-form {
   display: grid;
   gap: 12px;
@@ -89,19 +122,20 @@ h1 {
 
 label,
 .token-details summary {
-  color: #e2e8f0;
+  color: var(--color-text-soft);
   font-size: 13px;
   font-weight: 700;
 }
 
+/* 输入框状态覆盖默认浏览器样式，保持可访问焦点环。 */
 input {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid #475569;
-  border-radius: 6px;
-  color: #f8fafc;
-  background: #0f172a;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  background: var(--color-control);
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease,
@@ -109,7 +143,7 @@ input {
 }
 
 input::placeholder {
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
 input:hover:not(:disabled) {
@@ -124,15 +158,15 @@ input:disabled {
 input:focus-visible,
 button:focus-visible,
 summary:focus-visible {
-  outline: 2px solid #22c55e;
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
 }
 
 .token-details {
-  border: 1px solid #334155;
-  border-radius: 6px;
-  background: rgba(15, 23, 42, 0.56);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgba(15, 23, 42, 0.66);
 }
 
 .token-details summary {
@@ -144,7 +178,7 @@ summary:focus-visible {
 }
 
 .token-details summary:hover {
-  color: #f8fafc;
+  color: var(--color-text);
   background: rgba(51, 65, 85, 0.6);
 }
 
@@ -158,14 +192,15 @@ summary:focus-visible {
   gap: 10px;
 }
 
+/* 通用按钮样式，具体变体通过 secondary/compact/icon 修正。 */
 button {
   min-width: 44px;
   min-height: 44px;
   padding: 0 14px;
-  border: 1px solid #22c55e;
-  border-radius: 6px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-control);
   color: #052e16;
-  background: #22c55e;
+  background: var(--color-accent);
   cursor: pointer;
   font-weight: 700;
   transition:
@@ -177,8 +212,12 @@ button {
 }
 
 button:hover:not(:disabled) {
-  border-color: #4ade80;
-  background: #4ade80;
+  border-color: var(--color-accent-hover);
+  background: var(--color-accent-hover);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button:disabled {
@@ -187,22 +226,32 @@ button:disabled {
 }
 
 button.secondary {
-  color: #f8fafc;
-  background: #1e293b;
-  border-color: #475569;
+  color: var(--color-text);
+  background: var(--color-panel-raised);
+  border-color: var(--color-border-strong);
 }
 
 button.secondary:hover:not(:disabled) {
-  color: #f8fafc;
+  color: var(--color-text);
   border-color: #64748b;
-  background: #334155;
+  background: #243248;
 }
 
+.form-status {
+  margin: -2px 0 0;
+  color: var(--color-text-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* 工作区在桌面端拆分为时间线侧栏和报告主栏。 */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
-  gap: 20px;
-  padding: 20px 28px 28px;
+  grid-template-columns: minmax(260px, 288px) minmax(0, 1fr);
+  gap: 22px;
+  width: min(100%, 1480px);
+  padding: 22px var(--space-page) var(--space-page);
+  margin: 0 auto;
 }
 
 .timeline,
@@ -210,9 +259,10 @@ button.secondary:hover:not(:disabled) {
   min-height: 420px;
 }
 
+/* 时间线侧栏展示后端流式阶段。 */
 .timeline {
   padding-right: 20px;
-  border-right: 1px solid #334155;
+  border-right: 1px solid var(--color-border);
 }
 
 .timeline__header {
@@ -229,25 +279,26 @@ button.secondary:hover:not(:disabled) {
 
 .timeline-empty {
   padding: 14px;
-  border: 1px dashed #475569;
-  border-radius: 8px;
-  color: #cbd5e1;
-  background: rgba(30, 41, 59, 0.48);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-panel);
+  color: var(--color-text-soft);
+  background: rgba(17, 24, 39, 0.72);
 }
 
 .timeline-empty p {
   margin: 4px 0 0;
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
+/* 时间线步骤和评论卡片共用基础容器样式。 */
 .step,
 .comment-card {
   min-width: 0;
   padding: 14px;
   margin-bottom: 12px;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  background: #1e293b;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel-raised);
 }
 
 .step {
@@ -262,7 +313,7 @@ button.secondary:hover:not(:disabled) {
   height: 10px;
   margin-top: 5px;
   border-radius: 999px;
-  background: #94a3b8;
+  background: var(--color-muted);
   box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
 }
 
@@ -278,7 +329,7 @@ button.secondary:hover:not(:disabled) {
 }
 
 .step__topline span {
-  color: #cbd5e1;
+  color: var(--color-text-soft);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -287,7 +338,7 @@ button.secondary:hover:not(:disabled) {
 .step code {
   display: block;
   margin-top: 3px;
-  color: #94a3b8;
+  color: var(--color-muted);
   font-family: "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -295,60 +346,62 @@ button.secondary:hover:not(:disabled) {
 
 .step p {
   margin: 8px 0 0;
-  color: #cbd5e1;
+  color: var(--color-text-soft);
   font-size: 13px;
   line-height: 1.45;
 }
 
 .step--running {
-  border-color: #22c55e;
+  border-color: var(--color-accent);
 }
 
 .step--running .step__marker {
-  background: #22c55e;
+  background: var(--color-accent);
   box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
 }
 
 .step--completed .step__marker {
-  background: #38bdf8;
+  background: var(--color-info);
   box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.16);
 }
 
 .step--failed {
-  border-color: #f87171;
+  border-color: var(--color-danger);
 }
 
 .step--failed .step__marker {
-  background: #f87171;
+  background: var(--color-danger);
   box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.18);
 }
 
 .step--unknown .step__marker {
-  background: #facc15;
+  background: var(--color-warning);
   box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.16);
 }
 
 .muted {
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
+/* 报告主栏承载摘要、风险、证据和评论输出。 */
 .report {
   min-width: 0;
-  color: #e2e8f0;
+  color: var(--color-text-soft);
 }
 
+/* 核心报告面板使用统一边框和背景，保持扫描一致性。 */
 .review-brief,
 .risk-radar,
 .evidence-drawer {
   min-width: 0;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  background: #1e293b;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
 }
 
 .review-brief {
-  padding: 16px;
-  margin-bottom: 14px;
+  padding: 18px;
+  margin-bottom: 16px;
 }
 
 .review-brief__header {
@@ -366,6 +419,7 @@ button.secondary:hover:not(:disabled) {
   margin-bottom: 8px;
   font-size: 24px;
   line-height: 1.2;
+  text-wrap: balance;
   overflow-wrap: anywhere;
 }
 
@@ -373,7 +427,7 @@ button.secondary:hover:not(:disabled) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 14px;
-  color: #cbd5e1;
+  color: var(--color-text-soft);
   font-size: 13px;
 }
 
@@ -390,23 +444,24 @@ button.secondary:hover:not(:disabled) {
   font-family: "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
+/* PR 统计区使用等宽网格方便横向比较。 */
 .review-brief__stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin: 16px 0;
+  margin: 18px 0 16px;
 }
 
 .review-brief__stats div {
   padding: 10px;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  background: #0f172a;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-control);
 }
 
 .review-brief__stats dt,
 .evidence-drawer__meta dt {
-  color: #94a3b8;
+  color: var(--color-muted);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -415,7 +470,7 @@ button.secondary:hover:not(:disabled) {
 .review-brief__stats dd,
 .evidence-drawer__meta dd {
   margin: 3px 0 0;
-  color: #f8fafc;
+  color: var(--color-text);
   font-weight: 700;
 }
 
@@ -427,12 +482,13 @@ button.secondary:hover:not(:disabled) {
   color: #fca5a5 !important;
 }
 
+/* 报告提示块用于降级和上下文截断状态。 */
 .review-alert {
   padding: 10px 12px;
   margin-bottom: 10px;
-  border: 1px solid #475569;
-  border-radius: 6px;
-  color: #cbd5e1;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  color: var(--color-text-soft);
   background: rgba(15, 23, 42, 0.72);
 }
 
@@ -449,7 +505,7 @@ button.secondary:hover:not(:disabled) {
 .review-brief__summary {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: 14px;
+  gap: 16px;
 }
 
 .review-brief__summary section {
@@ -468,7 +524,7 @@ button.secondary:hover:not(:disabled) {
 .risk-card__reason,
 .risk-card__suggestion,
 .evidence-block p {
-  color: #cbd5e1;
+  color: var(--color-text-soft);
   font-size: 14px;
   line-height: 1.45;
 }
@@ -514,18 +570,20 @@ button.secondary:hover:not(:disabled) {
   background: #475569;
 }
 
+/* 风险列表和证据详情在桌面端并排展示。 */
 .review-evidence-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.78fr);
-  gap: 14px;
+  gap: 16px;
   align-items: start;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
+/* 状态横幅集中展示错误和降级提醒。 */
 .status-banner-stack {
   display: grid;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .status-banner {
@@ -534,9 +592,9 @@ button.secondary:hover:not(:disabled) {
   justify-content: space-between;
   gap: 16px;
   padding: 12px 14px;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  background: #1e293b;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
 }
 
 .status-banner strong,
@@ -546,14 +604,14 @@ button.secondary:hover:not(:disabled) {
 
 .status-banner p {
   margin: 4px 0 0;
-  color: #cbd5e1;
+  color: var(--color-text-soft);
   font-size: 14px;
   line-height: 1.45;
 }
 
 .status-banner span {
   flex: 0 1 auto;
-  color: #cbd5e1;
+  color: var(--color-text-soft);
   font-family: "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -583,6 +641,7 @@ button.secondary:hover:not(:disabled) {
   padding: 14px;
 }
 
+/* 面板标题行统一左右分布，右侧可放计数或操作按钮。 */
 .section-heading,
 .evidence-drawer__header,
 .evidence-block__heading {
@@ -595,15 +654,16 @@ button.secondary:hover:not(:disabled) {
 .count-pill {
   min-width: 32px;
   padding: 4px 8px;
-  border: 1px solid #334155;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  color: #cbd5e1;
+  color: var(--color-text-soft);
   font-size: 12px;
   font-weight: 700;
   text-align: center;
-  background: #0f172a;
+  background: var(--color-control);
 }
 
+/* 严重级别筛选器使用分段按钮布局。 */
 .filter-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -612,21 +672,37 @@ button.secondary:hover:not(:disabled) {
 }
 
 .filter-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   min-width: 0;
   min-height: 40px;
   padding: 0 10px;
-  border-color: #334155;
-  color: #cbd5e1;
-  background: #0f172a;
+  border-color: var(--color-border);
+  color: var(--color-text-soft);
+  background: var(--color-control);
 }
 
 .filter-tab:hover:not(:disabled),
 .filter-tab--active {
   color: #052e16;
-  border-color: #22c55e;
-  background: #22c55e;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
 }
 
+.filter-tab__count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+/* 风险列表用按钮卡片承载可选择项。 */
 .risk-list {
   display: grid;
   gap: 10px;
@@ -635,15 +711,15 @@ button.secondary:hover:not(:disabled) {
 .risk-card {
   display: grid;
   width: 100%;
-  gap: 8px;
+  gap: 7px;
   min-height: 0;
   padding: 12px;
-  border: 1px solid #334155;
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
   color: inherit;
   cursor: pointer;
   text-align: left;
-  background: #0f172a;
+  background: var(--color-control);
   transition:
     border-color 180ms ease,
     background-color 180ms ease,
@@ -653,12 +729,12 @@ button.secondary:hover:not(:disabled) {
 
 .risk-card:hover,
 .risk-card--active {
-  border-color: #22c55e;
+  border-color: var(--color-accent);
   background: #14213a;
 }
 
 .risk-card--active {
-  box-shadow: inset 3px 0 0 #22c55e;
+  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 .risk-card__topline {
@@ -668,6 +744,7 @@ button.secondary:hover:not(:disabled) {
   align-items: center;
 }
 
+/* 严重级别徽标在列表、详情和摘要中复用。 */
 .severity-badge {
   display: inline-flex;
   align-items: center;
@@ -703,14 +780,14 @@ button.secondary:hover:not(:disabled) {
 
 .risk-card__source,
 .risk-card__confidence {
-  color: #94a3b8;
+  color: var(--color-muted);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .risk-card__title {
-  color: #f8fafc;
+  color: var(--color-text);
   font-size: 15px;
   font-weight: 800;
   line-height: 1.3;
@@ -718,28 +795,44 @@ button.secondary:hover:not(:disabled) {
 }
 
 .risk-card__meta {
-  color: #94a3b8;
+  color: var(--color-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
 .risk-card__suggestion {
   padding-top: 8px;
-  border-top: 1px solid #334155;
+  border-top: 1px solid var(--color-border);
+}
+
+.risk-card__reason,
+.risk-card__suggestion {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.risk-card__reason {
+  -webkit-line-clamp: 3;
+}
+
+.risk-card__suggestion {
+  -webkit-line-clamp: 2;
 }
 
 .risk-empty,
 .evidence-drawer--empty {
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
 .risk-empty {
   padding: 14px;
-  border: 1px dashed #475569;
-  border-radius: 8px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-panel);
   background: rgba(15, 23, 42, 0.62);
 }
 
+/* 证据抽屉桌面端保持粘性，方便对照风险列表。 */
 .evidence-drawer {
   position: sticky;
   top: 14px;
@@ -757,15 +850,15 @@ button.secondary:hover:not(:disabled) {
   min-width: 44px;
   min-height: 44px;
   padding: 0;
-  color: #f8fafc;
-  border-color: #475569;
-  background: #0f172a;
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-control);
 }
 
 .icon-button:hover:not(:disabled) {
   color: #052e16;
-  border-color: #22c55e;
-  background: #22c55e;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
 }
 
 .evidence-drawer__meta {
@@ -778,9 +871,9 @@ button.secondary:hover:not(:disabled) {
 .evidence-drawer__meta div {
   min-width: 0;
   padding: 10px;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  background: #0f172a;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-control);
 }
 
 .evidence-drawer__meta dd {
@@ -790,17 +883,18 @@ button.secondary:hover:not(:disabled) {
 .evidence-block {
   padding-top: 12px;
   margin-top: 12px;
-  border-top: 1px solid #334155;
+  border-top: 1px solid var(--color-border);
 }
 
+/* 证据代码块支持长行换行和垂直滚动。 */
 .evidence-block pre {
   max-height: 280px;
   padding: 12px;
   overflow: auto;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  color: #e2e8f0;
-  background: #020617;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-soft);
+  background: var(--color-code);
   font-family: "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -821,13 +915,14 @@ button.secondary:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
+/* AI trace 和建议评论是报告下方的辅助输出面板。 */
 .ai-trace-panel,
 .suggested-comments {
   padding: 14px;
-  margin-bottom: 14px;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  background: #1e293b;
+  margin-bottom: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
 }
 
 .ai-trace-panel pre {
@@ -835,10 +930,10 @@ button.secondary:hover:not(:disabled) {
   padding: 12px;
   margin: 12px 0 0;
   overflow: auto;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  color: #e2e8f0;
-  background: #020617;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-soft);
+  background: var(--color-code);
   font-family: "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   line-height: 1.55;
@@ -848,45 +943,46 @@ button.secondary:hover:not(:disabled) {
 }
 
 .ai-trace-panel__empty {
-  color: #94a3b8 !important;
+  color: var(--color-muted) !important;
 }
 
 .trace-status {
   flex: 0 0 auto;
   min-width: 86px;
   padding: 4px 8px;
-  border: 1px solid #334155;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  color: #cbd5e1;
+  color: var(--color-text-soft);
   font-size: 12px;
   font-weight: 800;
   text-align: center;
   text-transform: uppercase;
-  background: #0f172a;
+  background: var(--color-control);
 }
 
 .trace-status--running {
   color: #052e16;
-  border-color: #22c55e;
-  background: #22c55e;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
 }
 
 .trace-status--completed {
   color: #082f49;
-  border-color: #38bdf8;
-  background: #38bdf8;
+  border-color: var(--color-info);
+  background: var(--color-info);
 }
 
 .trace-status--failed {
   color: #450a0a;
-  border-color: #f87171;
-  background: #f87171;
+  border-color: var(--color-danger);
+  background: var(--color-danger);
 }
 
 .suggested-comments__heading {
   margin-bottom: 12px;
 }
 
+/* 建议评论列表保留复制按钮和正文的清晰分栏。 */
 .comment-list {
   display: grid;
   gap: 10px;
@@ -898,7 +994,7 @@ button.secondary:hover:not(:disabled) {
   gap: 12px;
   align-items: start;
   margin-bottom: 0;
-  background: #0f172a;
+  background: var(--color-control);
 }
 
 .comment-card__body {
@@ -908,7 +1004,7 @@ button.secondary:hover:not(:disabled) {
 .comment-card code {
   display: block;
   margin-bottom: 8px;
-  color: #94a3b8;
+  color: var(--color-muted);
   font-family: "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -916,7 +1012,7 @@ button.secondary:hover:not(:disabled) {
 
 .comment-card p {
   margin-bottom: 0;
-  color: #e2e8f0;
+  color: var(--color-text-soft);
   font-size: 14px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -924,20 +1020,57 @@ button.secondary:hover:not(:disabled) {
 
 .comments-empty {
   padding: 14px;
-  border: 1px dashed #475569;
-  border-radius: 8px;
-  color: #94a3b8;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-panel);
+  color: var(--color-muted);
   background: rgba(15, 23, 42, 0.62);
 }
 
+/* 空状态居中显示，避免未开始分析时主栏塌陷。 */
 .empty-report {
   display: grid;
-  min-height: 420px;
+  min-height: 280px;
   place-content: center;
+  padding: 28px;
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-panel);
+  background: rgba(17, 24, 39, 0.52);
 }
 
+.empty-report h2 {
+  margin-bottom: 6px;
+  color: var(--color-text);
+}
+
+.empty-report p {
+  margin-bottom: 0;
+  color: var(--color-text-soft);
+}
+
+.empty-report__skeleton {
+  display: grid;
+  gap: 8px;
+  width: min(320px, 64vw);
+  margin: 18px auto 0;
+}
+
+.empty-report__skeleton span {
+  height: 10px;
+  border-radius: 999px;
+  background: #243248;
+}
+
+.empty-report__skeleton span:nth-child(2) {
+  width: 78%;
+}
+
+.empty-report__skeleton span:nth-child(3) {
+  width: 48%;
+}
+
+/* 用户偏好减少动态效果时，压缩所有动画和过渡时间。 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -949,6 +1082,7 @@ button.secondary:hover:not(:disabled) {
   }
 }
 
+/* 中等宽度下证据详情下移，避免两栏过窄。 */
 @media (max-width: 1120px) {
   .review-evidence-grid {
     grid-template-columns: 1fr;
@@ -959,6 +1093,7 @@ button.secondary:hover:not(:disabled) {
   }
 }
 
+/* 平板宽度下取消时间线侧栏。 */
 @media (max-width: 980px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -970,6 +1105,7 @@ button.secondary:hover:not(:disabled) {
   }
 }
 
+/* 手机布局改为单列，所有主要操作按钮占满宽度。 */
 @media (max-width: 760px) {
   .input-panel,
   .workspace {
@@ -978,7 +1114,7 @@ button.secondary:hover:not(:disabled) {
   }
 
   .app-shell {
-    background: #0f172a;
+    background: var(--color-bg);
   }
 
   h1 {
@@ -1030,6 +1166,7 @@ button.secondary:hover:not(:disabled) {
   }
 }
 
+/* 极窄屏进一步压缩间距和标题字号。 */
 @media (max-width: 430px) {
   .input-panel,
   .workspace {
