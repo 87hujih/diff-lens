@@ -11,8 +11,11 @@ import { StepTimeline } from "./components/StepTimeline";
 import { SuggestedComments } from "./components/SuggestedComments";
 import { initialReviewState, reviewReducer } from "./state/reviewReducer";
 import type { ReviewEvent } from "./types/review";
+import { createPacedEventDispatcher, type PacedEventDispatcher } from "./utils/pacedEvents";
 import { getVisibleRisks, type RiskSeverityFilter } from "./utils/riskFilters";
 import "./styles.css";
+
+const STREAM_EVENT_DISPLAY_INTERVAL_MS = 380;
 
 // App 连接输入表单、流式分析状态和报告展示区域。
 export default function App() {
@@ -23,11 +26,13 @@ export default function App() {
   const [activeRiskId, setActiveRiskId] = useState<string | null>(null);
   const [riskFilter, setRiskFilter] = useState<RiskSeverityFilter>("all");
   const abortRef = useRef<AbortController | null>(null);
+  const eventQueueRef = useRef<PacedEventDispatcher<ReviewEvent> | null>(null);
   const requestIdRef = useRef(0);
 
   // runAnalysis 取消旧请求并启动新的 SSE 分析会话。
   async function runAnalysis(request: { pr_url: string; github_token?: string; demo: boolean }) {
     abortRef.current?.abort();
+    eventQueueRef.current?.clear();
     dispatch({ type: "reset" });
     setIsRunning(true);
 
@@ -43,29 +48,40 @@ export default function App() {
         dispatch({ type: "stream_event", event });
       }
     };
+    const eventQueue = createPacedEventDispatcher<ReviewEvent>({
+      intervalMs: STREAM_EVENT_DISPLAY_INTERVAL_MS,
+      onEvent: dispatchIfCurrent
+    });
+    eventQueueRef.current = eventQueue;
 
     try {
-      await analyzeReviewStream(request, dispatchIfCurrent, controller.signal);
+      await analyzeReviewStream(request, (event) => {
+        if (requestIdRef.current === requestId) {
+          eventQueue.enqueue(event);
+        }
+      }, controller.signal);
+      await eventQueue.waitForIdle();
     } catch (error) {
       if (requestIdRef.current !== requestId) {
         return;
       }
 
-      dispatch({
-        type: "stream_event",
-        event: {
-          type: "error",
-          data: {
-            code: "stream_request_failed",
-            message: error instanceof Error ? error.message : "Review stream failed",
-            recoverable: true
-          }
+      eventQueue.enqueue({
+        type: "error",
+        data: {
+          code: "stream_request_failed",
+          message: error instanceof Error ? error.message : "评审分析流请求失败",
+          recoverable: true
         }
       });
+      await eventQueue.waitForIdle();
     } finally {
       if (requestIdRef.current === requestId) {
         setIsRunning(false);
         abortRef.current = null;
+        if (eventQueueRef.current === eventQueue) {
+          eventQueueRef.current = null;
+        }
       }
     }
   }
@@ -110,6 +126,13 @@ export default function App() {
     }
   }, [activeRiskId, visibleRisks]);
 
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      eventQueueRef.current?.clear();
+    };
+  }, []);
+
   return (
     <main className="app-shell">
       <PrInputPanel
@@ -133,11 +156,11 @@ export default function App() {
           ) : (
             <div className={isRunning ? "empty-report empty-report--running" : "empty-report"}>
               <div>
-                <h2>{isRunning ? "Analysis in progress" : "No report yet"}</h2>
+                <h2>{isRunning ? "正在分析" : "暂无报告"}</h2>
                 <p>
                   {isRunning
-                    ? "Findings can appear before the final normalized report."
-                    : "Enter a PR URL or run the demo stream."}
+                    ? "最终标准化报告生成前，风险发现可能会先出现。"
+                    : "输入 PR URL，或运行演示流。"}
                 </p>
                 {isRunning ? (
                   <div className="empty-report__skeleton" aria-hidden="true">

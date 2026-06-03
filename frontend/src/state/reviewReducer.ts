@@ -70,6 +70,18 @@ function toDisplayText(value: unknown): string {
   }
 }
 
+function mergeStep(steps: StepPayload[], nextStep: StepPayload): StepPayload[] {
+  const existingIndex = steps.findIndex((step) => step.step === nextStep.step);
+
+  if (existingIndex < 0) {
+    return [...steps, nextStep];
+  }
+
+  const nextSteps = steps.slice();
+  nextSteps[existingIndex] = nextStep;
+  return nextSteps;
+}
+
 // reviewReducer 将每个 SSE 事件折叠为可渲染的应用状态。
 export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewState {
   const event = asStreamEvent(action);
@@ -83,7 +95,7 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
       return {
         ...state,
         status: "running",
-        steps: [...state.steps, event.data as StepPayload]
+        steps: mergeStep(state.steps, event.data as StepPayload)
       };
     case "pr":
       return {

@@ -63,3 +63,22 @@ test("reviewReducer marks failed and degraded when done reports a degraded failu
   assert.equal(failed.status, "failed");
   assert.equal(failed.degraded, true);
 });
+
+test("reviewReducer keeps the latest status for each pipeline step", () => {
+  const running = reviewReducer(initialReviewState, {
+    type: "step",
+    data: { step: "fetch_pr", status: "running", message: "正在获取 PR" }
+  });
+
+  const completed = reviewReducer(running, {
+    type: "step",
+    data: { step: "fetch_pr", status: "completed", message: "已获取 PR" }
+  });
+
+  assert.equal(completed.steps.length, 1);
+  assert.deepEqual(completed.steps[0], {
+    step: "fetch_pr",
+    status: "completed",
+    message: "已获取 PR"
+  });
+});
