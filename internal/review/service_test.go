@@ -379,7 +379,7 @@ func TestAnalyzeRealReturnsClearErrorWhenGitHubClientFactoryMissing(t *testing.T
 	if events != nil {
 		t.Fatalf("events = %v, want nil on missing factory", events)
 	}
-	if !strings.Contains(err.Error(), "github client factory is not configured") {
+	if !strings.Contains(err.Error(), "GitHub client factory 未配置") {
 		t.Fatalf("error = %q, want clear missing factory message", err.Error())
 	}
 }

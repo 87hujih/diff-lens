@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Risk } from "../types/review";
 import { copyToClipboard } from "../utils/clipboard";
+import { formatSeverity, formatSource } from "../utils/displayText";
 import { normalizeSeverity } from "../utils/reviewStatus";
 
 type CopyFeedback = "idle" | "copied" | "failed";
@@ -15,10 +16,10 @@ interface EvidenceDrawerProps {
 // formatLocation 将风险定位格式化成人类可读路径。
 function formatLocation(risk: Risk): string {
   if (!risk.file) {
-    return "No specific line";
+    return "无具体行号";
   }
 
-  return risk.line ? `${risk.file}:${risk.line}` : `${risk.file} · No specific line`;
+  return risk.line ? `${risk.file}:${risk.line}` : `${risk.file} · 无具体行号`;
 }
 
 // EvidenceDrawer 展示单条风险的证据、引用和修复建议。
@@ -67,11 +68,11 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
       <aside className="evidence-drawer evidence-drawer--empty" aria-labelledby="evidence-title">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Evidence</p>
-            <h3 id="evidence-title">Select a risk</h3>
+            <p className="eyebrow">证据</p>
+            <h3 id="evidence-title">选择一条风险</h3>
           </div>
         </div>
-        <p>Choose a finding to inspect evidence, references, and remediation guidance.</p>
+        <p>选择一条风险后，可查看证据、引用和修复建议。</p>
       </aside>
     );
   }
@@ -84,36 +85,36 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
     <aside className="evidence-drawer" aria-labelledby="evidence-title">
       <div className="evidence-drawer__header">
         <div>
-          <p className="eyebrow">Evidence</p>
+          <p className="eyebrow">证据</p>
           <h3 id="evidence-title">{risk.title}</h3>
         </div>
-        <button type="button" className="icon-button" aria-label="Close evidence drawer" onClick={onClose}>
+        <button type="button" className="icon-button" aria-label="关闭证据抽屉" onClick={onClose}>
           X
         </button>
       </div>
 
       <dl className="evidence-drawer__meta">
         <div>
-          <dt>Severity</dt>
+          <dt>严重级别</dt>
           <dd>
             <span className={`severity-badge severity-badge--${severity}`}>
-              {risk.severity || "unknown"}
+              {formatSeverity(risk.severity)}
             </span>
           </dd>
         </div>
         <div>
-          <dt>Source</dt>
-          <dd>{risk.source}</dd>
+          <dt>来源</dt>
+          <dd>{formatSource(risk.source)}</dd>
         </div>
         <div>
-          <dt>Location</dt>
+          <dt>位置</dt>
           <dd>{formatLocation(risk)}</dd>
         </div>
       </dl>
 
       <section className="evidence-block">
         <div className="evidence-block__heading">
-          <h4>Evidence</h4>
+          <h4>证据</h4>
           {hasEvidence ? (
             <button
               type="button"
@@ -122,21 +123,21 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
                 void copyText("evidence", risk.evidence ?? "");
               }}
             >
-              {feedback.evidence === "copied" ? "Copied" : feedback.evidence === "failed" ? "Copy failed" : "Copy"}
+              {feedback.evidence === "copied" ? "已复制" : feedback.evidence === "failed" ? "复制失败" : "复制"}
             </button>
           ) : null}
         </div>
         {hasEvidence ? (
           <pre>{risk.evidence}</pre>
         ) : hasRefs ? (
-          <p className="muted">The current report includes reference IDs but not full snippets.</p>
+          <p className="muted">当前报告包含引用 ID，但未包含完整片段。</p>
         ) : (
-          <p className="muted">No evidence snippet was provided for this finding.</p>
+          <p className="muted">这条风险未提供证据片段。</p>
         )}
       </section>
 
       <section className="evidence-block">
-        <h4>Reference IDs</h4>
+        <h4>引用 ID</h4>
         {hasRefs ? (
           <ul className="reference-list">
             {risk.evidence_refs?.map((ref) => (
@@ -146,13 +147,13 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
             ))}
           </ul>
         ) : (
-          <p className="muted">No evidence reference IDs were provided.</p>
+          <p className="muted">未提供证据引用 ID。</p>
         )}
       </section>
 
       <section className="evidence-block">
         <div className="evidence-block__heading">
-          <h4>Suggestion</h4>
+          <h4>建议</h4>
           {risk.suggestion ? (
             <button
               type="button"
@@ -162,14 +163,14 @@ export function EvidenceDrawer({ risk, onClose }: EvidenceDrawerProps) {
               }}
             >
               {feedback.suggestion === "copied"
-                ? "Copied"
+                ? "已复制"
                 : feedback.suggestion === "failed"
-                  ? "Copy failed"
-                  : "Copy"}
+                  ? "复制失败"
+                  : "复制"}
             </button>
           ) : null}
         </div>
-        <p>{risk.suggestion || "No remediation suggestion was provided."}</p>
+        <p>{risk.suggestion || "未提供修复建议。"}</p>
       </section>
     </aside>
   );

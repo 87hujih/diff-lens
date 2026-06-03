@@ -149,7 +149,7 @@ func (s *Service) analyzeReal(ctx context.Context, req AnalyzeRequest) (<-chan R
 	if err != nil {
 		return nil, &AnalysisError{
 			Code:        "invalid_pr_url",
-			Message:     "invalid GitHub pull request URL",
+			Message:     "GitHub Pull Request URL 无效",
 			Recoverable: true,
 			Stage:       "fetch_pr",
 			Err:         err,
@@ -159,7 +159,7 @@ func (s *Service) analyzeReal(ctx context.Context, req AnalyzeRequest) (<-chan R
 	if s.githubClientFactory == nil {
 		return nil, &AnalysisError{
 			Code:    "github_client_not_configured",
-			Message: "github client factory is not configured",
+			Message: "GitHub client factory 未配置",
 			Stage:   "fetch_pr",
 		}
 	}
@@ -173,7 +173,7 @@ func (s *Service) analyzeReal(ctx context.Context, req AnalyzeRequest) (<-chan R
 	if client == nil {
 		return nil, &AnalysisError{
 			Code:    "github_client_not_configured",
-			Message: "github client factory returned nil client",
+			Message: "GitHub client factory 返回了空 client",
 			Stage:   "fetch_pr",
 		}
 	}
@@ -219,7 +219,7 @@ func (s *Service) runRealPipeline(ctx context.Context, out chan<- ReviewEvent, c
 	if err != nil {
 		sendErrorAndDone(send, ErrorPayload{
 			Code:        "diff_parse_failed",
-			Message:     "Diff parsing failed before a report could be produced.",
+			Message:     "生成报告前 diff 解析失败。",
 			Recoverable: true,
 			Stage:       "parse_diff",
 		})
@@ -370,42 +370,42 @@ func errorPayloadForStage(err error, stage string) ErrorPayload {
 	case errors.Is(err, github.ErrPRNotFound):
 		return ErrorPayload{
 			Code:        "github_pr_not_found",
-			Message:     "GitHub pull request was not found; check that the URL points to an existing PR.",
+			Message:     "未找到 GitHub Pull Request；请确认 URL 指向存在的 PR。",
 			Recoverable: true,
 			Stage:       stage,
 		}
 	case errors.Is(err, github.ErrGitHubUnauthorized):
 		return ErrorPayload{
 			Code:        "github_unauthorized",
-			Message:     "GitHub authentication failed; configure a valid token and retry.",
+			Message:     "GitHub 鉴权失败；请配置有效 token 后重试。",
 			Recoverable: true,
 			Stage:       stage,
 		}
 	case errors.Is(err, github.ErrGitHubRateLimited):
 		return ErrorPayload{
 			Code:        "github_rate_limited",
-			Message:     "GitHub API rate limit was reached; configure a token or retry later.",
+			Message:     "已达到 GitHub API 速率限制；请配置 token 或稍后重试。",
 			Recoverable: true,
 			Stage:       stage,
 		}
 	case errors.Is(err, github.ErrGitHubRequestFailed):
 		return ErrorPayload{
 			Code:        "github_request_failed",
-			Message:     "GitHub request failed; check the network connection and retry.",
+			Message:     "GitHub 请求失败；请检查网络连接后重试。",
 			Recoverable: true,
 			Stage:       stage,
 		}
 	case errors.Is(err, github.ErrGitHubResponseInvalid):
 		return ErrorPayload{
 			Code:        "github_response_invalid",
-			Message:     "GitHub returned an invalid response; retry after the upstream response is healthy.",
+			Message:     "GitHub 返回了无效响应；请在上游恢复后重试。",
 			Recoverable: false,
 			Stage:       stage,
 		}
 	default:
 		return ErrorPayload{
 			Code:        "analysis_failed",
-			Message:     "Analysis failed before a report could be produced.",
+			Message:     "生成报告前分析失败。",
 			Recoverable: false,
 			Stage:       stage,
 		}

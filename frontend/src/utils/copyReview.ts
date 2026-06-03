@@ -1,4 +1,5 @@
 import type { Report, Risk, SuggestedComment } from "../types/review";
+import { formatSeverity } from "./displayText";
 
 function formatLocation(file?: string, line?: number): string {
   if (!file) {
@@ -31,18 +32,18 @@ function riskWeight(risk: Risk): number {
 
 function formatRisk(risk: Risk): string {
   const location = formatLocation(risk.file, risk.line);
-  const parts = [`- [${risk.severity || "unknown"}] ${risk.title}`];
+  const parts = [`- [${formatSeverity(risk.severity)}] ${risk.title}`];
 
   if (location) {
-    parts.push(`  Location: ${location}`);
+    parts.push(`  位置：${location}`);
   }
 
   if (risk.reason) {
-    parts.push(`  Reason: ${risk.reason}`);
+    parts.push(`  原因：${risk.reason}`);
   }
 
   if (risk.suggestion) {
-    parts.push(`  Suggested fix: ${risk.suggestion}`);
+    parts.push(`  建议修复：${risk.suggestion}`);
   }
 
   return parts.join("\n");
@@ -50,7 +51,7 @@ function formatRisk(risk: Risk): string {
 
 export function formatSingleComment(comment: SuggestedComment): string {
   const location = formatLocation(comment.file, comment.line);
-  const body = comment.body.trim() || "No suggested comment body was provided.";
+  const body = comment.body.trim() || "未提供建议评论正文。";
 
   return location ? `${location}\n\n${body}` : body;
 }
@@ -60,31 +61,31 @@ export function formatFullReview(report: Report): string {
   const formattedRisks =
     importantRisks.length > 0
       ? importantRisks.map(formatRisk).join("\n\n")
-      : "- No risks were reported.";
+      : "- 未报告风险。";
   const formattedComments =
     report.comments.length > 0
       ? report.comments
           .map((comment, index) => `${index + 1}. ${formatSingleComment(comment)}`)
           .join("\n\n")
-      : "No suggested comments were generated.";
+      : "未生成建议评论。";
 
   return [
-    `Review: ${report.pr.repo} #${report.pr.number}`,
-    `Title: ${report.pr.title}`,
+    `评审：${report.pr.repo} #${report.pr.number}`,
+    `标题：${report.pr.title}`,
     "",
-    "Summary",
-    report.summary.overview || "No overview was provided.",
+    "摘要",
+    report.summary.overview || "未提供概览。",
     "",
-    `Risk level: ${report.summary.risk_level || "unknown"}`,
+    `风险级别：${formatSeverity(report.summary.risk_level)}`,
     "",
-    formatList("Key changes", report.summary.key_changes, "No key changes were reported."),
+    formatList("关键变更", report.summary.key_changes, "未报告关键变更。"),
     "",
-    formatList("Review focus", report.summary.review_focus, "No review focus areas were reported."),
+    formatList("评审重点", report.summary.review_focus, "未报告评审重点。"),
     "",
-    "Important risks",
+    "重要风险",
     formattedRisks,
     "",
-    "Suggested comments",
+    "建议评论",
     formattedComments
   ].join("\n");
 }

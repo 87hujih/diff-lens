@@ -12,7 +12,7 @@ interface SuggestedCommentsProps {
 
 function getCommentLocation(comment: SuggestedComment): string {
   if (!comment.file) {
-    return "General review";
+    return "通用评审";
   }
 
   return comment.line ? `${comment.file}:${comment.line}` : comment.file;
@@ -53,8 +53,8 @@ export function SuggestedComments({ report }: SuggestedCommentsProps) {
     <section className="suggested-comments" aria-labelledby="suggested-comments-title">
       <div className="section-heading suggested-comments__heading">
         <div>
-          <p className="eyebrow">Review output</p>
-          <h3 id="suggested-comments-title">Suggested comments</h3>
+          <p className="eyebrow">评审输出</p>
+          <h3 id="suggested-comments-title">建议评论</h3>
         </div>
         <button
           type="button"
@@ -64,16 +64,16 @@ export function SuggestedComments({ report }: SuggestedCommentsProps) {
           }}
         >
           {feedback["full-review"] === "copied"
-            ? "Copied"
+            ? "已复制"
             : feedback["full-review"] === "failed"
-              ? "Copy failed"
-              : "Copy full review"}
+              ? "复制失败"
+              : "复制完整评审"}
         </button>
       </div>
 
       {report.comments.length === 0 ? (
         <div className="comments-empty" role="status">
-          No suggested comments were generated for this review.
+          本次评审未生成建议评论。
         </div>
       ) : (
         <div className="comment-list">
@@ -84,7 +84,7 @@ export function SuggestedComments({ report }: SuggestedCommentsProps) {
               <article className="comment-card" key={comment.id}>
                 <div className="comment-card__body">
                   <code>{getCommentLocation(comment)}</code>
-                  <p>{comment.body || "No suggested comment body was provided."}</p>
+                  <p>{comment.body || "未提供建议评论正文。"}</p>
                 </div>
                 <button
                   type="button"
@@ -94,10 +94,10 @@ export function SuggestedComments({ report }: SuggestedCommentsProps) {
                   }}
                 >
                   {feedback[key] === "copied"
-                    ? "Copied"
+                    ? "已复制"
                     : feedback[key] === "failed"
-                      ? "Copy failed"
-                      : "Copy"}
+                      ? "复制失败"
+                      : "复制"}
                 </button>
               </article>
             );

@@ -29,13 +29,13 @@ func (p *Provider) Stream(ctx context.Context) (<-chan review.ReviewEvent, error
 				Severity:   "medium",
 				Confidence: 0.78,
 				Category:   "test_gap",
-				Title:      "Source export path changed without matching tests",
+				Title:      "导出路径变更缺少配套测试",
 				File:       "internal/exporter/export.go",
 				Line:       48,
 				Evidence:   "+ rows, err := db.QueryContext(ctx, query)",
 				RuleID:     "source_without_tests",
-				Reason:     "The PR changes billing export code, but no test file changed with it.",
-				Suggestion: "Add tests for successful export, empty results, and database errors.",
+				Reason:     "该 PR 修改了账单导出代码，但没有同步修改测试文件。",
+				Suggestion: "补充成功导出、空结果和数据库错误场景的测试。",
 			},
 		}
 		reportRisks := []review.Risk{
@@ -46,12 +46,12 @@ func (p *Provider) Stream(ctx context.Context) (<-chan review.ReviewEvent, error
 				Severity:   "high",
 				Confidence: 0.84,
 				Category:   "authz",
-				Title:      "Export endpoint may bypass account-level permission checks",
+				Title:      "导出接口可能绕过账户级权限检查",
 				File:       "internal/http/export_handler.go",
 				Line:       72,
 				Evidence:   "+ return exporter.Export(ctx, accountID, format)",
-				Reason:     "The new handler forwards the account ID to the exporter, but the visible change does not show an authorization check before returning billing data.",
-				Suggestion: "Verify the caller can read the account before starting the export, and add a regression test for unauthorized users.",
+				Reason:     "新 handler 将账户 ID 转发给 exporter，但可见变更中没有在返回账单数据前执行授权检查。",
+				Suggestion: "开始导出前先验证调用方是否可读取该账户，并补充未授权用户的回归测试。",
 			},
 			{
 				ID:         "merged-demo-query-scope",
@@ -59,13 +59,13 @@ func (p *Provider) Stream(ctx context.Context) (<-chan review.ReviewEvent, error
 				Severity:   "medium",
 				Confidence: 0.88,
 				Category:   "data_scope",
-				Title:      "Billing export query needs tenant scoping evidence",
+				Title:      "账单导出查询需要租户隔离证据",
 				File:       "internal/exporter/export.go",
 				Line:       48,
 				Evidence:   "+ rows, err := db.QueryContext(ctx, query)",
 				RuleID:     "source_without_tests",
-				Reason:     "The deterministic rule found an untested export path, and AI analysis points to the same query as a data isolation boundary.",
-				Suggestion: "Keep the account filter close to the query and cover cross-account isolation in tests before merging.",
+				Reason:     "确定性规则发现了未测试的导出路径，AI 分析也将同一查询识别为数据隔离边界。",
+				Suggestion: "将账户过滤条件靠近查询逻辑，并在合并前用测试覆盖跨账户隔离。",
 			},
 		}
 
@@ -73,9 +73,9 @@ func (p *Provider) Stream(ctx context.Context) (<-chan review.ReviewEvent, error
 			PR: pr,
 			Summary: review.Summary{
 				RiskLevel:   "medium",
-				Overview:    "This demo PR adds a guarded billing export flow. The main review focus is tenant-safe data access plus tests around the new export path.",
-				KeyChanges:  []string{"Adds a billing export HTTP endpoint", "Introduces exporter query and CSV field mapping", "Updates the API response to return export status"},
-				ReviewFocus: []string{"Confirm account-level authorization before exporting billing data", "Verify the query is tenant-scoped", "Add tests for success, empty result, and database error cases"},
+				Overview:    "这个演示 PR 增加了受保护的账单导出流程。主要评审重点是租户安全的数据访问，以及新导出路径周围的测试覆盖。",
+				KeyChanges:  []string{"新增账单导出 HTTP 接口", "引入导出查询和 CSV 字段映射", "更新 API 响应以返回导出状态"},
+				ReviewFocus: []string{"确认导出账单数据前完成账户级授权", "验证查询已按租户范围收敛", "补充成功、空结果和数据库错误场景测试"},
 			},
 			Risks: reportRisks,
 			Evidence: []review.EvidenceItem{
@@ -99,13 +99,13 @@ func (p *Provider) Stream(ctx context.Context) (<-chan review.ReviewEvent, error
 					ID:   "comment-demo-authz",
 					File: "internal/http/export_handler.go",
 					Line: 72,
-					Body: "Please make the account-level authorization check explicit before starting the billing export, and add a regression test for a user without access to this account.",
+					Body: "请在开始账单导出前显式执行账户级授权检查，并为无权访问该账户的用户补充回归测试。",
 				},
 				{
 					ID:   "comment-demo-export-tests",
 					File: "internal/exporter/export.go",
 					Line: 48,
-					Body: "This export query would benefit from tests for the happy path, empty results, database errors, and cross-account isolation.",
+					Body: "这段导出查询建议补充正常路径、空结果、数据库错误和跨账户隔离测试。",
 				},
 			},
 			Meta: review.ReportMeta{
@@ -124,46 +124,46 @@ func (p *Provider) Stream(ctx context.Context) (<-chan review.ReviewEvent, error
 			}
 		}
 
-		if !send(step("fetch_pr", "running", "Loading demo PR metadata")) {
+		if !send(step("fetch_pr", "running", "正在加载演示 PR 元数据")) {
 			return
 		}
-		if !send(step("fetch_pr", "completed", "Loaded demo PR metadata")) {
+		if !send(step("fetch_pr", "completed", "已加载演示 PR 元数据")) {
 			return
 		}
 		if !send(review.ReviewEvent{Type: review.EventPR, Data: pr}) {
 			return
 		}
-		if !send(step("parse_diff", "running", "Parsing demo diff")) {
+		if !send(step("parse_diff", "running", "正在解析演示 diff")) {
 			return
 		}
-		if !send(step("parse_diff", "completed", "Parsed demo diff")) {
+		if !send(step("parse_diff", "completed", "已解析演示 diff")) {
 			return
 		}
-		if !send(step("scan_rules", "running", "Running deterministic demo rules")) {
+		if !send(step("scan_rules", "running", "正在运行确定性演示规则")) {
 			return
 		}
-		if !send(step("scan_rules", "completed", "Rule scan completed with 1 demo risk")) {
+		if !send(step("scan_rules", "completed", "规则扫描完成，发现 1 条演示风险")) {
 			return
 		}
 		if !send(review.ReviewEvent{Type: review.EventRules, Data: review.RulesPayload{Risks: ruleRisks}}) {
 			return
 		}
-		if !send(step("build_context", "running", "Building bounded demo review context")) {
+		if !send(step("build_context", "running", "正在构建受控演示评审上下文")) {
 			return
 		}
-		if !send(step("build_context", "completed", "Built bounded demo review context")) {
+		if !send(step("build_context", "completed", "已构建受控演示评审上下文")) {
 			return
 		}
-		if !send(step("analyze_ai", "running", "Generating deterministic demo AI analysis")) {
+		if !send(step("analyze_ai", "running", "正在生成确定性演示 AI 分析")) {
 			return
 		}
-		if !send(step("analyze_ai", "completed", "Generated deterministic demo AI analysis")) {
+		if !send(step("analyze_ai", "completed", "已生成确定性演示 AI 分析")) {
 			return
 		}
-		if !send(step("result", "running", "Composing demo review report")) {
+		if !send(step("result", "running", "正在组合演示评审报告")) {
 			return
 		}
-		if !send(step("result", "completed", "Generated final demo review report")) {
+		if !send(step("result", "completed", "已生成最终演示评审报告")) {
 			return
 		}
 		if !send(review.ReviewEvent{Type: review.EventResult, Data: report}) {
@@ -177,7 +177,7 @@ func (p *Provider) Stream(ctx context.Context) (<-chan review.ReviewEvent, error
 
 func demoPR() review.PRInfo {
 	return review.PRInfo{
-		Title:        "feat: add guarded billing export",
+		Title:        "feat: 增加受保护的账单导出",
 		Author:       "demo-user",
 		Repo:         "example/payments",
 		Number:       42,

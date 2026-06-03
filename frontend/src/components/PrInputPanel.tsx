@@ -25,13 +25,13 @@ export function PrInputPanel({
     <section className="input-panel" aria-labelledby="review-console-title">
       <div className="input-panel__heading">
         <p className="eyebrow">diff-lens</p>
-        <h1 id="review-console-title">PR review console</h1>
-        <p className="input-panel__subtitle">Local review analysis for GitHub pull requests.</p>
+        <h1 id="review-console-title">PR 评审控制台</h1>
+        <p className="input-panel__subtitle">面向 GitHub Pull Request 的本地评审分析。</p>
       </div>
 
       <form onSubmit={onAnalyze} className="review-form" aria-busy={isRunning}>
         <div className="field-group">
-          <label htmlFor="pr-url">Pull request URL</label>
+          <label htmlFor="pr-url">PR 地址</label>
           <input
             id="pr-url"
             type="url"
@@ -47,9 +47,9 @@ export function PrInputPanel({
         </div>
 
         <details className="token-details">
-          <summary>GitHub token</summary>
+          <summary>GitHub Token</summary>
           <div className="field-group">
-            <label htmlFor="github-token">Token (optional)</label>
+            <label htmlFor="github-token">Token（可选）</label>
             <input
               id="github-token"
               value={token}
@@ -63,15 +63,15 @@ export function PrInputPanel({
 
         <div className="form-actions">
           <button type="submit" disabled={isRunning}>
-            {isRunning ? "Analyzing..." : "Analyze PR"}
+            {isRunning ? "分析中..." : "分析 PR"}
           </button>
           <button type="button" className="secondary" onClick={onRunDemo} disabled={isRunning}>
-            Demo PR
+            演示 PR
           </button>
         </div>
         {isRunning ? (
           <p className="form-status" role="status" aria-live="polite">
-            Streaming analysis from the backend.
+            正在接收后端流式分析结果。
           </p>
         ) : null}
       </form>

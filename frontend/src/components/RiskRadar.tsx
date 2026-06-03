@@ -1,5 +1,6 @@
 import type { Risk } from "../types/review";
 import type { RiskSeverityFilter } from "../utils/riskFilters";
+import { formatCategory, formatSeverity, formatSource } from "../utils/displayText";
 import { getVisibleRisks } from "../utils/riskFilters";
 import { normalizeSeverity } from "../utils/reviewStatus";
 
@@ -7,10 +8,10 @@ import { normalizeSeverity } from "../utils/reviewStatus";
 type VisibleRiskFilter = "all" | "high" | "medium" | "low";
 
 const FILTERS: Array<{ value: VisibleRiskFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" }
+  { value: "all", label: "全部" },
+  { value: "high", label: "高" },
+  { value: "medium", label: "中" },
+  { value: "low", label: "低" }
 ];
 
 // RiskRadarProps 控制风险列表筛选、选中态和点击行为。
@@ -25,7 +26,7 @@ interface RiskRadarProps {
 // formatConfidence 将 0-1 置信度转换成百分比标签。
 function formatConfidence(value: number): string {
   if (!Number.isFinite(value)) {
-    return "n/a";
+    return "无";
   }
 
   return `${Math.round(value * 100)}%`;
@@ -34,10 +35,10 @@ function formatConfidence(value: number): string {
 // formatLocation 将风险文件和行号压缩成列表中的短标签。
 function formatLocation(risk: Risk): string {
   if (!risk.file) {
-    return "No specific line";
+    return "无具体行号";
   }
 
-  return risk.line ? `${risk.file}:${risk.line}` : `${risk.file} · No specific line`;
+  return risk.line ? `${risk.file}:${risk.line}` : `${risk.file} · 无具体行号`;
 }
 
 // RiskRadar 按严重级别展示可筛选、可选中的风险列表。
@@ -60,13 +61,13 @@ export function RiskRadar({
     <section className="risk-radar" aria-labelledby="risk-radar-title">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Risk radar</p>
-          <h3 id="risk-radar-title">Findings</h3>
+          <p className="eyebrow">风险雷达</p>
+          <h3 id="risk-radar-title">风险发现</h3>
         </div>
         <span className="count-pill">{visibleRisks.length}</span>
       </div>
 
-      <div className="filter-tabs" role="group" aria-label="Filter risks by severity">
+      <div className="filter-tabs" role="group" aria-label="按严重级别筛选风险">
         {FILTERS.map((item) => (
           <button
             key={item.value}
@@ -83,8 +84,8 @@ export function RiskRadar({
 
       {visibleRisks.length === 0 ? (
         <div className="risk-empty">
-          <strong>No risks to show</strong>
-          <p>{risks.length === 0 ? "No risks have been reported." : "No risks match this filter."}</p>
+          <strong>暂无可展示风险</strong>
+          <p>{risks.length === 0 ? "尚未报告风险。" : "没有风险匹配当前筛选条件。"}</p>
         </div>
       ) : (
         <div className="risk-list">
@@ -103,15 +104,15 @@ export function RiskRadar({
               >
                 <span className="risk-card__topline">
                   <span className={`severity-badge severity-badge--${severity}`}>
-                    {risk.severity || "unknown"}
+                    {formatSeverity(risk.severity)}
                   </span>
-                  <span className="risk-card__source">{risk.source}</span>
+                  <span className="risk-card__source">{formatSource(risk.source)}</span>
                   <span className="risk-card__confidence">{formatConfidence(risk.confidence)}</span>
                 </span>
 
                 <span className="risk-card__title">{risk.title}</span>
                 <span className="risk-card__meta">
-                  {risk.category || "Uncategorized"} · {formatLocation(risk)}
+                  {formatCategory(risk.category)} · {formatLocation(risk)}
                 </span>
                 <span className="risk-card__reason">{risk.reason}</span>
                 <span className="risk-card__suggestion">{risk.suggestion}</span>

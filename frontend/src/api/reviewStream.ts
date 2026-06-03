@@ -22,12 +22,12 @@ export async function analyzeReviewStream(
 
     if (!response.ok) {
       throw new Error(
-        `Stream request failed with status ${response.status} ${response.statusText}`.trim()
+        `分析流请求失败，状态码 ${response.status} ${response.statusText}`.trim()
       );
     }
 
     if (!response.body) {
-      throw new Error("Stream request failed: response body is missing");
+      throw new Error("分析流请求失败：响应正文为空");
     }
 
     const reader = response.body.getReader();
@@ -112,7 +112,7 @@ export function parseSSEMessage(message: string): ReviewEvent | null {
       data: JSON.parse(dataLines.join("\n"))
     };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "unknown parse error";
-    throw new Error(`Failed to parse SSE data for event "${eventType}": ${reason}`);
+    const reason = error instanceof Error ? error.message : "未知解析错误";
+    throw new Error(`无法解析事件 "${eventType}" 的 SSE 数据：${reason}`);
   }
 }

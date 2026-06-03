@@ -1,4 +1,5 @@
 import type { StepPayload } from "../types/review";
+import { formatStepStatus } from "../utils/displayText";
 import { normalizeStepStatus } from "../utils/reviewStatus";
 
 interface AITracePanelProps {
@@ -26,24 +27,26 @@ export function AITracePanel({ aiText, steps }: AITracePanelProps) {
   const trimmedAIText = aiText.trim();
   const aiStatus = getAIStatus(steps);
 
-  let body = "AI analysis has not started for this run.";
+  let body = "本次运行尚未开始 AI 分析。";
 
   if (trimmedAIText) {
     body = trimmedAIText;
   } else if (aiStatus === "running") {
-    body = "AI analysis is running. Waiting for streamed model trace.";
+    body = "AI 分析正在运行，等待模型流式输出。";
   } else if (aiStatus === "completed" || aiStatus === "failed") {
-    body = "The AI stage finished without streaming trace text. Structured review data may still be available.";
+    body = "AI 阶段已结束，但没有输出流式文本；结构化评审数据可能仍然可用。";
   }
 
   return (
     <section className="ai-trace-panel" aria-labelledby="ai-trace-title">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">AI trace</p>
-          <h3 id="ai-trace-title">Model stream</h3>
+          <p className="eyebrow">AI 轨迹</p>
+          <h3 id="ai-trace-title">模型输出流</h3>
         </div>
-        <span className={`trace-status trace-status--${aiStatus}`}>{aiStatus}</span>
+        <span className={`trace-status trace-status--${aiStatus}`}>
+          {aiStatus === "not-started" ? "未开始" : formatStepStatus(aiStatus)}
+        </span>
       </div>
       <pre className={trimmedAIText ? "" : "ai-trace-panel__empty"}>{body}</pre>
     </section>

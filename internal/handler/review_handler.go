@@ -24,7 +24,7 @@ func NewReviewHandler(service *review.Service) *ReviewHandler {
 func (h *ReviewHandler) AnalyzeStream(c *gin.Context) {
 	var req review.AnalyzeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求体无效"})
 		return
 	}
 
@@ -70,49 +70,49 @@ func errorPayloadFromError(err error) review.ErrorPayload {
 		return mappedErrorPayload(
 			"invalid_pr_url",
 			"fetch_pr",
-			"invalid GitHub pull request URL",
+			"GitHub Pull Request URL 无效",
 			true,
 		)
 	case errors.Is(err, github.ErrPRNotFound):
 		return mappedErrorPayload(
 			"github_pr_not_found",
 			"fetch_pr",
-			"GitHub pull request was not found; check that the URL points to an existing PR.",
+			"未找到 GitHub Pull Request；请确认 URL 指向存在的 PR。",
 			true,
 		)
 	case errors.Is(err, github.ErrGitHubUnauthorized):
 		return mappedErrorPayload(
 			"github_unauthorized",
 			"fetch_pr",
-			"GitHub authentication failed; configure a valid token and retry.",
+			"GitHub 鉴权失败；请配置有效 token 后重试。",
 			true,
 		)
 	case errors.Is(err, github.ErrGitHubRateLimited):
 		return mappedErrorPayload(
 			"github_rate_limited",
 			"fetch_pr",
-			"GitHub API rate limit was reached; configure a token or retry later.",
+			"已达到 GitHub API 速率限制；请配置 token 或稍后重试。",
 			true,
 		)
 	case errors.Is(err, github.ErrGitHubRequestFailed):
 		return mappedErrorPayload(
 			"github_request_failed",
 			"fetch_pr",
-			"GitHub request failed; check the network connection and retry.",
+			"GitHub 请求失败；请检查网络连接后重试。",
 			true,
 		)
 	case errors.Is(err, github.ErrGitHubResponseInvalid):
 		return mappedErrorPayload(
 			"github_response_invalid",
 			"fetch_pr",
-			"GitHub returned an invalid response; retry after the upstream response is healthy.",
+			"GitHub 返回了无效响应；请在上游恢复后重试。",
 			false,
 		)
 	default:
 		return mappedErrorPayload(
 			"analysis_failed",
 			"",
-			"Analysis failed before a report could be produced.",
+			"生成报告前分析失败。",
 			false,
 		)
 	}
@@ -134,18 +134,18 @@ func messageForCode(code string, fallback string) string {
 
 	switch code {
 	case "invalid_pr_url":
-		return "invalid GitHub pull request URL"
+		return "GitHub Pull Request URL 无效"
 	case "github_pr_not_found":
-		return "GitHub pull request was not found; check that the URL points to an existing PR."
+		return "未找到 GitHub Pull Request；请确认 URL 指向存在的 PR。"
 	case "github_unauthorized":
-		return "GitHub authentication failed; configure a valid token and retry."
+		return "GitHub 鉴权失败；请配置有效 token 后重试。"
 	case "github_rate_limited":
-		return "GitHub API rate limit was reached; configure a token or retry later."
+		return "已达到 GitHub API 速率限制；请配置 token 或稍后重试。"
 	case "github_request_failed":
-		return "GitHub request failed; check the network connection and retry."
+		return "GitHub 请求失败；请检查网络连接后重试。"
 	case "github_response_invalid":
-		return "GitHub returned an invalid response; retry after the upstream response is healthy."
+		return "GitHub 返回了无效响应；请在上游恢复后重试。"
 	default:
-		return "Analysis failed before a report could be produced."
+		return "生成报告前分析失败。"
 	}
 }

@@ -1,4 +1,5 @@
 import type { Report } from "../types/review";
+import { formatRiskLevel } from "../utils/displayText";
 import { normalizeRiskLevel } from "../utils/reviewStatus";
 
 // ReviewBriefProps 包含最终归一化报告。
@@ -8,7 +9,7 @@ interface ReviewBriefProps {
 
 // formatCount 用统一数字格式展示文件数和行数。
 function formatCount(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value);
+  return new Intl.NumberFormat("zh-CN").format(value);
 }
 
 // ReviewBrief 渲染 PR 摘要、统计、降级提示和评审重点。
@@ -27,47 +28,47 @@ export function ReviewBrief({ report }: ReviewBriefProps) {
             {report.pr.repo} #{report.pr.number}
           </p>
           <h2 id="review-brief-title">{report.pr.title}</h2>
-          <div className="review-brief__meta" aria-label="Pull request metadata">
-            <span>by {report.pr.author}</span>
+          <div className="review-brief__meta" aria-label="Pull Request 元数据">
+            <span>作者：{report.pr.author}</span>
             <span>
-              <code>{report.pr.source_branch}</code> to <code>{report.pr.target_branch}</code>
+              <code>{report.pr.source_branch}</code> 到 <code>{report.pr.target_branch}</code>
             </span>
           </div>
         </div>
-        <span className={`risk-level ${riskLevel}`} title={`Normalized as ${riskLevel}`}>
-          {report.summary.risk_level || "Unknown risk"}
+        <span className={`risk-level ${riskLevel}`} title={`标准化为 ${riskLevel}`}>
+          {formatRiskLevel(report.summary.risk_level)}
         </span>
       </header>
 
-      <dl className="review-brief__stats" aria-label="Pull request change statistics">
+      <dl className="review-brief__stats" aria-label="Pull Request 变更统计">
         <div>
-          <dt>Files</dt>
+          <dt>文件</dt>
           <dd>{formatCount(report.pr.changed_files)}</dd>
         </div>
         <div>
-          <dt>Additions</dt>
+          <dt>新增</dt>
           <dd className="stat-positive">+{formatCount(report.pr.additions)}</dd>
         </div>
         <div>
-          <dt>Deletions</dt>
+          <dt>删除</dt>
           <dd className="stat-negative">-{formatCount(report.pr.deletions)}</dd>
         </div>
         <div>
-          <dt>Commits</dt>
+          <dt>提交</dt>
           <dd>{formatCount(report.pr.commits)}</dd>
         </div>
       </dl>
 
       {hasTruncation ? (
         <div className="review-alert" role="note">
-          <strong>Context limited</strong>
+          <strong>上下文受限</strong>
           <p>
-            {report.meta.context_truncated ? "Context was truncated. " : ""}
+            {report.meta.context_truncated ? "上下文已被截断。 " : ""}
             {report.meta.omitted_files_count > 0
-              ? `${formatCount(report.meta.omitted_files_count)} files omitted. `
+              ? `已省略 ${formatCount(report.meta.omitted_files_count)} 个文件。 `
               : ""}
             {report.meta.omitted_snippets_count > 0
-              ? `${formatCount(report.meta.omitted_snippets_count)} snippets omitted.`
+              ? `已省略 ${formatCount(report.meta.omitted_snippets_count)} 个片段。`
               : ""}
           </p>
         </div>
@@ -75,12 +76,12 @@ export function ReviewBrief({ report }: ReviewBriefProps) {
 
       <div className="review-brief__summary">
         <section>
-          <h3>Overview</h3>
-          <p>{report.summary.overview || "No overview provided."}</p>
+          <h3>概览</h3>
+          <p>{report.summary.overview || "未提供概览。"}</p>
         </section>
 
         <section>
-          <h3>Key changes</h3>
+          <h3>关键变更</h3>
           {report.summary.key_changes.length > 0 ? (
             <ul>
               {report.summary.key_changes.map((change, index) => (
@@ -88,12 +89,12 @@ export function ReviewBrief({ report }: ReviewBriefProps) {
               ))}
             </ul>
           ) : (
-            <p className="muted">No key changes were reported.</p>
+            <p className="muted">未报告关键变更。</p>
           )}
         </section>
 
         <section>
-          <h3>Review focus</h3>
+          <h3>评审重点</h3>
           {report.summary.review_focus.length > 0 ? (
             <ul>
               {report.summary.review_focus.map((focus, index) => (
@@ -101,7 +102,7 @@ export function ReviewBrief({ report }: ReviewBriefProps) {
               ))}
             </ul>
           ) : (
-            <p className="muted">No review focus areas were reported.</p>
+            <p className="muted">未报告评审重点。</p>
           )}
         </section>
       </div>

@@ -1,13 +1,14 @@
 import type { StepPayload } from "../types/review";
+import { formatStepStatus } from "../utils/displayText";
 import { normalizeStepStatus } from "../utils/reviewStatus";
 
 const STEP_LABELS: Record<string, string> = {
-  fetch_pr: "Fetch PR",
-  parse_diff: "Parse diff",
-  scan_rules: "Scan rules",
-  build_context: "Build context",
-  analyze_ai: "Analyze AI",
-  result: "Result"
+  fetch_pr: "获取 PR",
+  parse_diff: "解析 diff",
+  scan_rules: "规则扫描",
+  build_context: "构建上下文",
+  analyze_ai: "AI 分析",
+  result: "生成报告"
 };
 
 function getStepLabel(stepId: string): string {
@@ -22,14 +23,14 @@ export function StepTimeline({ steps }: StepTimelineProps) {
   return (
     <aside className="timeline" aria-labelledby="timeline-title">
       <div className="timeline__header">
-        <p className="eyebrow">Pipeline</p>
-        <h2 id="timeline-title">Steps</h2>
+        <p className="eyebrow">流水线</p>
+        <h2 id="timeline-title">步骤</h2>
       </div>
 
       {steps.length === 0 ? (
         <div className="timeline-empty">
-          <strong>No stream events yet</strong>
-          <p>Run a PR analysis to see backend progress.</p>
+          <strong>暂无流式事件</strong>
+          <p>运行 PR 分析后可查看后端进度。</p>
         </div>
       ) : (
         <ol className="step-list">
@@ -43,7 +44,7 @@ export function StepTimeline({ steps }: StepTimelineProps) {
                 <div className="step__body">
                   <div className="step__topline">
                     <strong>{label}</strong>
-                    <span title={`Original status: ${step.status}`}>{status}</span>
+                    <span title={`原始状态：${step.status}`}>{formatStepStatus(status)}</span>
                   </div>
                   <code>{step.step}</code>
                   {step.message ? <p>{step.message}</p> : null}
