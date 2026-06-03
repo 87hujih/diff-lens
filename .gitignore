@@ -37,3 +37,21 @@ Thumbs.db
 # Python local artifacts
 __pycache__/
 *.py[cod]
+
+# local browser/debug scratch
+/.statusbar-cdp/
+/.codex-*-statusbar.*.log
+/.codex-*.log
+/.tmp-preview/
+/.tmp-*.tar
+/.__unlink_probe.txt
+/scripts/debug-*.go
+
+# local agent/tool workspaces
+/.agents/
+/.codex/
+/.merge-main-check/
+/.merge-worktree/
+/.pr-worktree-review-quality/
+/.resolve-worktree/
+/ui-ux-pro-max-skill/
