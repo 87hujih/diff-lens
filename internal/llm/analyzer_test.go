@@ -112,6 +112,52 @@ func TestAnalyzePostsOpenAICompatibleRequestAndParsesAnalysis(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsURLNormalizesVersionedBaseURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{
+			name:    "root base url",
+			baseURL: "https://llm.example.com",
+			want:    "https://llm.example.com/v1/chat/completions",
+		},
+		{
+			name:    "versioned base url",
+			baseURL: "https://api.xiaomimimo.com/v1",
+			want:    "https://api.xiaomimimo.com/v1/chat/completions",
+		},
+		{
+			name:    "versioned base url with trailing slash",
+			baseURL: "https://api.xiaomimimo.com/v1/",
+			want:    "https://api.xiaomimimo.com/v1/chat/completions",
+		},
+		{
+			name:    "nested proxy base url",
+			baseURL: "https://llm.example.com/proxy/v1",
+			want:    "https://llm.example.com/proxy/v1/chat/completions",
+		},
+		{
+			name:    "full chat completions endpoint",
+			baseURL: "https://llm.example.com/v1/chat/completions",
+			want:    "https://llm.example.com/v1/chat/completions",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := chatCompletionsURL(tt.baseURL)
+			if err != nil {
+				t.Fatalf("chatCompletionsURL returned error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("chatCompletionsURL(%q) = %q, want %q", tt.baseURL, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestAnalyzeClassifiesTransportAndResponseErrorsWithoutLeakingAPIKey 验证对应场景的行为是否符合预期。
 func TestAnalyzeClassifiesTransportAndResponseErrorsWithoutLeakingAPIKey(t *testing.T) {
 	tests := []struct {

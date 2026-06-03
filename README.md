@@ -1,7 +1,6 @@
 # diff-lens
 
 diff-lens 是一个本地 Web 版 AI Pull Request Review 助手。完整目标是：开发者输入 GitHub PR 链接后，系统获取 PR 变更，结合规则扫描和大模型分析，生成 PR 总结、风险提示和可复制的 Review 建议。
-
 项目目标不是替代 reviewer，而是帮助 reviewer 更快进入上下文，减少重复检查成本，并把高风险变更提前暴露出来。
 
 > 当前真实模式已接入 GitHub PR 获取、diff 解析、确定性规则扫描、受控上下文构建和 OpenAI 兼容 LLM 分析。未配置 `LLM_API_KEY` 或模型调用失败时，真实模式会返回包含规则风险的 degraded report；demo 模式仍用于展示稳定完整流程。
@@ -136,6 +135,8 @@ LLM_BASE_URL=https://api.deepseek.com
 LLM_API_KEY=replace-with-token
 LLM_MODEL=deepseek-chat
 ```
+
+后端启动时会读取工作目录下的 `.env` 文件；命令行或系统环境变量优先级更高。仓库已忽略 `.env`，不要提交真实 token 或 LLM key。
 
 `LLM_BASE_URL` 和 `LLM_MODEL` 有本地默认值；只有配置 `LLM_API_KEY` 后才会得到 AI summary、AI risks 和 suggested comments。支持 DeepSeek、Qwen、OpenAI 兼容网关等实现 `POST /v1/chat/completions` 的服务。
 

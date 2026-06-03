@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -58,5 +60,39 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	}
 	if cfg.LLMModel != "qwen-plus" {
 		t.Fatalf("LLMModel = %q, want %q", cfg.LLMModel, "qwen-plus")
+	}
+}
+
+func TestLoadReadsDotEnvFromWorkingDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	envPath := filepath.Join(tempDir, ".env")
+	envFile := []byte("PORT=9091\nGITHUB_TOKEN=ghp_dotenv\nLLM_BASE_URL=https://llm.local\nLLM_API_KEY=sk_dotenv\nLLM_MODEL=qwen-dotenv\n")
+	if err := os.WriteFile(envPath, envFile, 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	t.Chdir(tempDir)
+	t.Setenv("PORT", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("LLM_BASE_URL", "")
+	t.Setenv("LLM_API_KEY", "")
+	t.Setenv("LLM_MODEL", "")
+
+	cfg := config.Load()
+
+	if cfg.Port != "9091" {
+		t.Fatalf("Port = %q, want .env value", cfg.Port)
+	}
+	if cfg.GitHubToken != "ghp_dotenv" {
+		t.Fatalf("GitHubToken was not loaded from .env")
+	}
+	if cfg.LLMBaseURL != "https://llm.local" {
+		t.Fatalf("LLMBaseURL = %q, want .env value", cfg.LLMBaseURL)
+	}
+	if cfg.LLMAPIKey != "sk_dotenv" {
+		t.Fatalf("LLMAPIKey was not loaded from .env")
+	}
+	if cfg.LLMModel != "qwen-dotenv" {
+		t.Fatalf("LLMModel = %q, want .env value", cfg.LLMModel)
 	}
 }
